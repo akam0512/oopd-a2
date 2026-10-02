@@ -1,0 +1,4 @@
+build/
+tests_bin
+demo_bin
+.DS_Store
