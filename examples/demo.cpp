@@ -29,6 +29,12 @@ int main()
                            "O'Reilly", 2014, Money::of(200), "https://ebooks.example/emc",
                            FileFormat::PDF, true, LicenseModel::AnnualSubscription,
                            Money::of(500));
+    catalog.emplace<AudioBook>("AB01", "Project Hail Mary", "Ballantine", 2021,
+                               Money::of(100), "https://audio.example/phm",
+                               LicenseModel::AnnualSubscription, Money::of(300),
+                               "Ray Porter", 480);
+    catalog.emplace<Thesis>("T001", "Deep Learning for Hospital Records", "IIT Delhi",
+                            DegreeLevel::PhD, "Dr. Rao", 2025);
 
     std::cout << "=== Catalog ===\n";
     for (const Resource *r : catalog.all())
@@ -40,12 +46,18 @@ int main()
               << catalog.get("J001");
     std::cout << "\n=== Details of E001 ===\n"
               << catalog.get("E001");
+    std::cout << "\n=== Details of AB01 ===\n"
+              << catalog.get("AB01");
+    std::cout << "\n=== Details of T001 ===\n"
+              << catalog.get("T001");
 
-    Budget budget(Money::of(20000));
+    Budget budget(Money::of(25000));
     budget.setQuota(ResourceCategory::Book, {10, Money::of(8000)});
     budget.setQuota(ResourceCategory::ElectronicResource, {40, Money::of(12000)});
     budget.setQuota(ResourceCategory::Journal, {3, Money::of(2000)});
-    budget.setQuota(ResourceCategory::EBook, {10, Money::of(25000)});
+    budget.setQuota(ResourceCategory::EBook, {10, Money::of(3000)});
+    budget.setQuota(ResourceCategory::AudioBook, {4, Money::of(2000)});
+    budget.setQuota(ResourceCategory::Thesis, {5, Money::of(0)});
 
     AcquisitionManager acq(catalog, budget);
 
@@ -66,6 +78,10 @@ int main()
         {"J001", 2},  // 1200  rejected: journal unit quota (1 unit left)
         {"E001", 5},  // 500 + 1000 = 1500  ok
         {"E001", 8},  // 500 + 1600 = 2100  rejected: e-book unit quota (5 left)
+        {"AB01", 3},  // 300 + 300 = 600  ok
+        {"AB01", 3},  // 600  rejected: audiobook unit quota (1 seat left)
+        {"T001", 2},  // free  ok
+        {"T001", 4},  // free  rejected: thesis unit quota (3 left)
     });
 
     std::cout << "\n=== Acquisition report ===\n";
