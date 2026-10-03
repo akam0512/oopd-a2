@@ -13,7 +13,9 @@ Q1
 
 ## Q2 – EBook
 
-- Design note (Q2): An e-book is also a type of book, so Book and EBook have some common code, such as authors, ISBN, their getters, constructor parameters, and printing these details.
-- We cannot simply use inheritance to remove this duplication because Book inherits from Resource, while EBook needs to inherit from ElectronicResource to keep the seat-based pricing.
-- One way to avoid this duplication is to create a separate class containing the common information like authors and ISBN, and then use that class inside both Book and EBook.
-- I would prefer composition because it is simpler and avoids the complications of multiple inheritance.
+## Q2 – EBook
+
+- EBook derives from ElectronicResource, so seat-based pricing (platform fee + price × seats) and isDigital() are inherited unchanged.
+- Added a new category value EBook (also in categoryName() and kAllCategories) so e-books can have a quota separate from other electronic resources.
+- printDetails() calls ElectronicResource::printDetails() first, then prints authors, ISBN, file format and DRM status.
+- Duplication answer: Book and EBook both store authors and an ISBN, so the two fields, their accessors, the matching constructor parameters and the code in printDetails() that prints them (using joinAuthors) are written twice. Inheritance alone cannot remove this. EBook has to derive from ElectronicResource to get seat-based pricing, so it cannot also derive from Book: that would give it two Resource base subobjects (the diamond problem), which only virtual inheritance could fix, and that adds a lot of complexity. A better fix is composition: put authors and ISBN in a small class (for example BibliographicInfo, with a print helper) and let both Book and EBook hold one as a member. Inheriting from that small class as a mixin would also work, but composition is simpler.
