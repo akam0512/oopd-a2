@@ -22,7 +22,7 @@ namespace bookmgmt
     Money Journal::costFor(int copies) const
     {
         requirePositive(copies);
-        return unitPrice() * copies * subscriptionYears_;
+        return applyPrintBulkDiscount(unitPrice() * copies * subscriptionYears_, copies);
     }
 
     void Journal::printDetails(std::ostream &os) const

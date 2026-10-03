@@ -3,6 +3,7 @@
 #include <ostream>
 #include <sstream>
 #include <stdexcept>
+#include <utility>
 
 namespace bookmgmt
 {
@@ -55,6 +56,16 @@ namespace bookmgmt
     {
         if (quantity <= 0)
             throw std::invalid_argument("quantity must be positive");
+    }
+
+    // Q5 helper (new): print items get kBulkDiscountPercent% off an order of
+    // kBulkMinCopies or more copies. Used by the costFor overrides in Book,
+    // Journal and Thesis.
+    Money Resource::applyPrintBulkDiscount(Money total, int copies)
+    {
+        if (copies < kBulkMinCopies)
+            return total;
+        return total.scaledByPercent(100 - kBulkDiscountPercent);
     }
 
     Money Resource::costFor(int quantity) const

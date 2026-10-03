@@ -4,39 +4,49 @@
 
 #include "bookmgmt/Resource.h"
 
-namespace bookmgmt {
+namespace bookmgmt
+{
 
-enum class LicenseModel { Perpetual, AnnualSubscription };
+    enum class LicenseModel
+    {
+        Perpetual,
+        AnnualSubscription
+    };
 
-// An online resource licensed per concurrent-user seat (databases, e-journal
-// packages, software, ...). unitPrice = price per seat.
-// costFor(seats) = platformFee + unitPrice * seats.
-class ElectronicResource : public Resource {
-public:
-    ElectronicResource(std::string id, std::string title, std::string publisher,
-                       int year, Money pricePerSeat, std::string accessUrl,
-                       LicenseModel license = LicenseModel::AnnualSubscription,
-                       Money platformFee = Money{});
+    // An online resource licensed per concurrent-user seat (databases, e-journal
+    // packages, software, ...). unitPrice = price per seat.
+    // costFor(seats) = platformFee + unitPrice * seats.
+    class ElectronicResource : public Resource
+    {
+    public:
+        static constexpr int kFullPriceSeats = 50;
+        static constexpr int kExtraSeatPercent = 50;
 
-    const std::string& accessUrl() const { return accessUrl_; }
-    LicenseModel license() const { return license_; }
-    Money platformFee() const { return platformFee_; }
+        ElectronicResource(std::string id, std::string title, std::string publisher,
+                           int year, Money pricePerSeat, std::string accessUrl,
+                           LicenseModel license = LicenseModel::AnnualSubscription,
+                           Money platformFee = Money{});
 
-    ResourceCategory category() const override {
-        return ResourceCategory::ElectronicResource;
-    }
-    bool isDigital() const override { return true; }
-    Money costFor(int seats) const override;
+        const std::string &accessUrl() const { return accessUrl_; }
+        LicenseModel license() const { return license_; }
+        Money platformFee() const { return platformFee_; }
 
-protected:
-    void printDetails(std::ostream& os) const override;
+        ResourceCategory category() const override
+        {
+            return ResourceCategory::ElectronicResource;
+        }
+        bool isDigital() const override { return true; }
+        Money costFor(int seats) const override;
 
-private:
-    std::string accessUrl_;
-    LicenseModel license_;
-    Money platformFee_;
-};
+    protected:
+        void printDetails(std::ostream &os) const override;
 
-const char* licenseName(LicenseModel m);
+    private:
+        std::string accessUrl_;
+        LicenseModel license_;
+        Money platformFee_;
+    };
 
-}  // namespace bookmgmt
+    const char *licenseName(LicenseModel m);
+
+} // namespace bookmgmt

@@ -38,5 +38,11 @@ namespace bookmgmt
         os << "  degree: " << degreeName(degree_) << "\n"
            << "  supervisor: " << supervisor_ << "\n";
     }
+    // Q5: a thesis is a print item, so it gets the print bulk discount like Book and Journal.
+    Money Thesis::costFor(int copies) const
+    {
+        requirePositive(copies);
+        return applyPrintBulkDiscount(unitPrice() * copies, copies);
+    }
 
 } // namespace bookmgmt

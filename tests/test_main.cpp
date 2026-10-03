@@ -369,6 +369,61 @@ static void testHardcover()
     CHECK_THROWS(acq.purchase("B2", 1), QuotaExceededError); // 72 + 72 > 100
 }
 
+static void testBulkDiscounts()
+{
+    // Print: 10% off at 10+ copies in one order
+    Book paper("B1", "T", {"A"}, "i", "P", 2020, Money::of(100));
+    CHECK(paper.costFor(9) == Money::of(900));   // no discount
+    CHECK(paper.costFor(10) == Money::of(900));  // 1000 - 10%
+    CHECK(paper.costFor(20) == Money::of(1800)); // 2000 - 10%
+
+    // Hardcover surcharge first, then the discount: 120 * 10 = 1200 -> 1080
+    Book hard("B2", "T", {"A"}, "i", "P", 2020, Money::of(100), 1, Binding::Hardcover);
+    CHECK(hard.costFor(10) == Money::of(1080));
+
+    // Rounding: 11 * 0.01 = 0.11 -> 0.099 -> 0.10
+    Book cheap("B3", "T", {"A"}, "i", "P", 2020, Money::fromMinor(1));
+    CHECK(cheap.costFor(11) == Money::fromMinor(10));
+
+    // Journal: the threshold counts copies, not years
+    Journal j("J1", "T", "i", "P", 2026, Money::of(100), 12, 2);
+    CHECK(j.costFor(9) == Money::of(1800));  // 9 * 100 * 2
+    CHECK(j.costFor(10) == Money::of(1800)); // 2000 - 10%
+
+    // Thesis
+    Thesis th("T1", "T", "U", DegreeLevel::Master, "S", 2024, Money::of(10));
+    CHECK(th.costFor(9) == Money::of(90));
+    CHECK(th.costFor(10) == Money::of(90)); // 100 - 10%
+
+    // Electronic: seats beyond the 50th cost half price; platform fee unchanged
+    ElectronicResource e("R1", "DB", "P", 2026, Money::of(10), "url",
+                         LicenseModel::AnnualSubscription, Money::of(100));
+    CHECK(e.costFor(50) == Money::of(600));  // 100 + 50 * 10
+    CHECK(e.costFor(51) == Money::of(605));  // + one seat at 5
+    CHECK(e.costFor(60) == Money::of(650));  // + 10 seats at 5
+    CHECK(e.costFor(100) == Money::of(850)); // + 50 seats at 5
+
+    // EBook and AudioBook inherit the rule
+    EBook eb("E1", "T", {"A"}, "i", "P", 2020, Money::of(10), "url", FileFormat::PDF,
+             false, LicenseModel::AnnualSubscription, Money::of(100));
+    CHECK(eb.costFor(60) == Money::of(650));
+    AudioBook ab("A1", "T", "P", 2020, Money::of(10), "url",
+                 LicenseModel::AnnualSubscription, Money::of(100), "N", 60);
+    CHECK(ab.costFor(60) == Money::of(650));
+
+    // Quotas and budget use the discounted cost
+    Catalog c;
+    c.emplace<Book>("B1", "T", std::vector<std::string>{"A"}, "i", "P", 2020, Money::of(100));
+    c.emplace<ElectronicResource>("R1", "DB", "P", 2026, Money::of(10), "url",
+                                  LicenseModel::AnnualSubscription, Money{});
+    Budget b(Money::of(5000));
+    b.setQuota(ResourceCategory::Book, {20, Money::of(950)});
+    b.setQuota(ResourceCategory::ElectronicResource, {100, Money::of(560)});
+    AcquisitionManager acq(c, b);
+    CHECK(acq.purchase("B1", 10).cost == Money::of(900)); // 1000 undiscounted would not fit 950
+    CHECK(acq.purchase("R1", 60).cost == Money::of(550)); // 600 undiscounted would not fit 560
+}
+
 int main()
 {
     testMoney();
@@ -381,6 +436,7 @@ int main()
     testAudioBook();
     testThesis();
     testHardcover();
+    testBulkDiscounts();
     std::cout
         << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;

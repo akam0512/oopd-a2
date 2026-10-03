@@ -37,3 +37,15 @@ Q1
 - Money is stored in whole paise, so I added `Money::scaledByPercent()` to calculate the 20% increase. It uses rounding half away from zero. This function can also be reused for later pricing questions.
 
 - Paperback books remain unchanged. I changed the demo batch from `B002 x5` to `B002 x4` because five hardcover copies would exceed the Book spend quota.
+
+## Q5 – Bulk discounts
+
+- Book, Journal and Thesis get 10% discount when 10 or more copies are bought in one order. The quantity is checked for each order separately, not by adding quantities from previous orders.
+
+- The discount is applied to the total cost after the hardcover price increase. I use `Money::scaledByPercent()` so the final amount is rounded only once. For Journals, only the number of copies is counted for the 10-copy limit, not the subscription years.
+
+- I kept the original `Resource::costFor()` unchanged. I added `applyPrintBulkDiscount()` as a protected helper in `Resource` and use it in Book, Journal and Thesis, so the same discount logic is not repeated.
+
+- For electronic resources, the first 50 seats are charged at the full price and every seat after 50 costs half price. The platform fee is not discounted. This is handled in `ElectronicResource::costFor()`, so EBook and AudioBook get the same behavior automatically.
+
+- Quotas and the overall budget use the discounted cost because they calculate the cost using `costFor()`.

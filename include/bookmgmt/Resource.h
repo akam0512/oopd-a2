@@ -64,6 +64,10 @@ namespace bookmgmt
         // Subclasses append their own fields (one "  key: value" line each).
         virtual void printDetails(std::ostream &os) const;
         static void requirePositive(int quantity);
+        // Q5: print items get kBulkDiscountPercent% off an order of kBulkMinCopies or more.
+        static constexpr int kBulkMinCopies = 10;
+        static constexpr int kBulkDiscountPercent = 10;
+        static Money applyPrintBulkDiscount(Money total, int copies);
 
     private:
         std::string id_;

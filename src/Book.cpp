@@ -42,7 +42,7 @@ namespace bookmgmt
         Money perCopy = unitPrice();
         if (binding_ == Binding::Hardcover)
             perCopy = perCopy.scaledByPercent(100 + kHardcoverSurchargePercent);
-        return perCopy * copies;
+        return applyPrintBulkDiscount(perCopy * copies, copies);
     }
 
     void Book::printDetails(std::ostream &os) const
