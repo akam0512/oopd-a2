@@ -67,8 +67,8 @@ int main()
 
     acq.processBatch({
         {"B001", 4},  // 1800  ok
-        {"B002", 5},  // 6000  ok  -> book spend 7800
-        {"B001", 1},  // 450   rejected: book spend quota (200 left)
+        {"B002", 4},  // 4 x 1440 = 5760  ok (hardcover: 1200 + 20%)  -> book spend 7560
+        {"B001", 1},  // 450   rejected: book spend quota (440 left)
         {"R001", 20}, // 5000  ok
         {"R002", 25}, // 10000 rejected: e-resource unit quota (20 seats left)
         {"R002", 15}, // 6000  ok  -> e-resource spend 11000

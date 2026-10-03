@@ -341,6 +341,33 @@ static void testThesis()
     CHECK_THROWS(acq.purchase("T1", 2), QuotaExceededError);
     CHECK(b.usageFor(ResourceCategory::Thesis).units == 1);
 }
+static void testHardcover()
+{
+    Book paper("B1", "T", {"A"}, "i", "P", 2020, Money::of(100));
+    Book hard("B2", "T", {"A"}, "i", "P", 2020, Money::of(100), 1, Binding::Hardcover);
+
+    CHECK(paper.costFor(3) == Money::of(300)); // paperback unchanged
+    CHECK(hard.costFor(1) == Money::of(120));  // +20%
+    CHECK(hard.costFor(3) == Money::of(360));
+    CHECK(hard.unitPrice() == Money::of(100)); // listed price is unchanged
+
+    // Rounding: 0.03 * 1.20 = 0.036 -> 0.04 (half away from zero)
+    Book tiny("B3", "T", {"A"}, "i", "P", 2020, Money::fromMinor(3), 1, Binding::Hardcover);
+    CHECK(tiny.costFor(1) == Money::fromMinor(4));
+
+    CHECK_THROWS(hard.costFor(0), std::invalid_argument);
+
+    // Quota and budget use the surcharged cost
+    Catalog c;
+    c.emplace<Book>("B2", "T", std::vector<std::string>{"A"}, "i", "P", 2020,
+                    Money::of(60), 1, Binding::Hardcover);
+    Budget b(Money::of(1000));
+    b.setQuota(ResourceCategory::Book, {10, Money::of(100)});
+    AcquisitionManager acq(c, b);
+    CHECK(acq.quote("B2", 1) == Money::of(72)); // 60 + 20%
+    CHECK(acq.purchase("B2", 1).cost == Money::of(72));
+    CHECK_THROWS(acq.purchase("B2", 1), QuotaExceededError); // 72 + 72 > 100
+}
 
 int main()
 {
@@ -353,6 +380,8 @@ int main()
     testEBook();
     testAudioBook();
     testThesis();
-    std::cout << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
+    testHardcover();
+    std::cout
+        << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;
 }

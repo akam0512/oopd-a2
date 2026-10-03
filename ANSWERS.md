@@ -25,3 +25,15 @@ Q1
 - AudioBook: I chose ElectronicResource as the base class because an audiobook is a digital resource that can be accessed by users. So it can use the existing seat-based pricing and other features of ElectronicResource. If I derived it directly from Resource, I would have to implement that logic again. Book is also not a good choice because it contains print-book details such as edition and binding. An audiobook only needs to add its narrator and duration, with duration being positive.
 
 - Thesis: I chose Resource directly because a thesis does not really fit the Book class. It does not need things like ISBN, edition, or binding, and it is usually free. Resource already allows the price to be zero, so the normal costFor() can handle it without extra pricing logic. The thesis adds the university, degree, and supervisor information and has its own category.
+
+### Q4 – Hardcover surcharge
+
+- I kept `unitPrice()` as the listed price. For hardcover books, I override `costFor()` and add the 20% surcharge there. This means quotes, purchases, quotas and the budget automatically use the correct cost.
+
+- I used a named constant `kHardcoverSurchargePercent` instead of directly writing `20` in the calculation.
+
+- The surcharge is applied to each copy, and then multiplied by the number of copies.
+
+- Money is stored in whole paise, so I added `Money::scaledByPercent()` to calculate the 20% increase. It uses rounding half away from zero. This function can also be reused for later pricing questions.
+
+- Paperback books remain unchanged. I changed the demo batch from `B002 x5` to `B002 x4` because five hardcover copies would exceed the Book spend quota.
