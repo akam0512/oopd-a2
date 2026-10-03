@@ -7,7 +7,8 @@
 
 using namespace bookmgmt;
 
-int main() {
+int main()
+{
     Catalog catalog;
 
     catalog.emplace<Book>("B001", "Clean Code", std::vector<std::string>{"Robert C. Martin"},
@@ -21,15 +22,22 @@ int main() {
     catalog.emplace<ElectronicResource>("R002", "MATLAB Campus Licence", "MathWorks", 2026,
                                         Money::of(400), "https://licensing.example/matlab",
                                         LicenseModel::Perpetual);
+    catalog.emplace<Journal>("J001", "Nature", "0028-0836", "Springer Nature", 2026,
+                             Money::of(300), 51, 2);
 
     std::cout << "=== Catalog ===\n";
-    for (const Resource* r : catalog.all()) std::cout << r->summary() << "\n";
+    for (const Resource *r : catalog.all())
+        std::cout << r->summary() << "\n";
 
-    std::cout << "\n=== Details of R001 ===\n" << catalog.get("R001");
+    std::cout << "\n=== Details of R001 ===\n"
+              << catalog.get("R001");
+    std::cout << "\n=== Details of J001 ===\n"
+              << catalog.get("J001");
 
     Budget budget(Money::of(20000));
     budget.setQuota(ResourceCategory::Book, {10, Money::of(8000)});
     budget.setQuota(ResourceCategory::ElectronicResource, {40, Money::of(12000)});
+    budget.setQuota(ResourceCategory::Journal, {3, Money::of(2000)});
 
     AcquisitionManager acq(catalog, budget);
 
@@ -38,14 +46,16 @@ int main() {
     std::cout << "20 seats of R001  = " << acq.quote("R001", 20) << "  (incl. platform fee)\n";
 
     acq.processBatch({
-        {"B001", 4},   // 1800  ok
-        {"B002", 5},   // 6000  ok  -> book spend 7800
-        {"B001", 1},   // 450   rejected: book spend quota (200 left)
-        {"R001", 20},  // 5000  ok
-        {"R002", 25},  // 10000 rejected: e-resource unit quota (20 seats left)
-        {"R002", 15},  // 6000  ok  -> e-resource spend 11000
-        {"R002", 5},   // 2000  rejected: e-resource spend quota (1000 left)
-        {"X999", 1},   // rejected: unknown id
+        {"B001", 4},  // 1800  ok
+        {"B002", 5},  // 6000  ok  -> book spend 7800
+        {"B001", 1},  // 450   rejected: book spend quota (200 left)
+        {"R001", 20}, // 5000  ok
+        {"R002", 25}, // 10000 rejected: e-resource unit quota (20 seats left)
+        {"R002", 15}, // 6000  ok  -> e-resource spend 11000
+        {"R002", 5},  // 2000  rejected: e-resource spend quota (1000 left)
+        {"X999", 1},  // rejected: unknown id
+        {"J001", 2},  // 1200  ok  -> journal spend 1200
+        {"J001", 2},  // 1200  rejected: journal unit quota (1 unit left)
     });
 
     std::cout << "\n=== Acquisition report ===\n";
@@ -55,15 +65,18 @@ int main() {
     budget.print(std::cout);
 
     std::cout << "\n=== Holdings ===\n";
-    for (const Resource* r : catalog.all())
+    for (const Resource *r : catalog.all())
         std::cout << "  " << r->id() << ": " << catalog.holdings(r->id())
                   << (r->isDigital() ? " seats" : " copies") << "\n";
 
     // Direct purchase: errors are reported with exceptions
     std::cout << "\n=== Direct purchase that breaks a quota ===\n";
-    try {
+    try
+    {
         acq.purchase("B002", 1);
-    } catch (const QuotaExceededError& e) {
+    }
+    catch (const QuotaExceededError &e)
+    {
         std::cout << "QuotaExceededError: " << e.what() << "\n";
     }
     return 0;
