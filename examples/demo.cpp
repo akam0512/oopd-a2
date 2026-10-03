@@ -96,7 +96,27 @@ int main()
     for (const Resource *r : catalog.all())
         std::cout << "  " << r->id() << ": " << catalog.holdings(r->id())
                   << (r->isDigital() ? " seats" : " copies") << "\n";
-
+    // Q6: taxes. Print items 5%, electronic items 18%. Quotas are checked
+    // against the post-tax cost.
+    std::cout << "\n=== Taxes (print 5%, electronic 18%) ===\n";
+    Catalog taxCatalog;
+    taxCatalog.emplace<Book>("TB1", "Clean Code", std::vector<std::string>{"Robert C. Martin"},
+                             "978-0132350884", "Prentice Hall", 2008, Money::of(450));
+    taxCatalog.emplace<ElectronicResource>("TR1", "IEEE Xplore Digital Library", "IEEE", 2026,
+                                           Money::of(150), "https://ieeexplore.example",
+                                           LicenseModel::AnnualSubscription, Money::of(2000));
+    Budget taxBudget(Money::of(10000));
+    taxBudget.setQuota(ResourceCategory::Book, {10, Money::of(920)});
+    AcquisitionManager taxed(taxCatalog, taxBudget, TaxPolicy(5, 18));
+    std::cout << "2 copies of TB1: pre-tax " << taxed.quote("TB1", 2) << ", post-tax "
+              << taxed.quoteWithTax("TB1", 2) << "\n";
+    taxed.processBatch({
+        {"TB1", 2},  // 900 + 45 = 945  rejected: fits 920 before tax, not after
+        {"TB1", 1},  // 450 + 22.50 = 472.50  ok
+        {"TR1", 20}, // 5000 + 900 = 5900  ok
+    });
+    taxed.printReport(std::cout);
+    taxBudget.print(std::cout);
     // Direct purchase: errors are reported with exceptions
     std::cout << "\n=== Direct purchase that breaks a quota ===\n";
     try

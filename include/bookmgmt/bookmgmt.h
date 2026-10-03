@@ -13,3 +13,4 @@
 #include "bookmgmt/Exceptions.h"
 #include "bookmgmt/Money.h"
 #include "bookmgmt/Resource.h"
+#include "bookmgmt/Tax.h"

@@ -2,16 +2,14 @@
 
 ## Attempted questions
 
-Q1
+Q1, Q2, Q3, Q4, Q5
 
 ## Q1 – Journal
 
--I created a Journal class that inherits from Resource. It implements its own category(), costFor(), and printDetails() functions.
--The cost of a journal depends on the number of copies and the subscription period. So, costFor(copies) calculates the cost as unit price × number of copies × subscription years.
--The subscription period cannot be less than 1 year. If an invalid value is given, the constructor throws std::invalid_argument.
--I also added Journal to ResourceCategory, categoryName(), and kAllCategories so that journals can be included when setting quotas and displaying budget information.
-
-## Q2 – EBook
+- I created a Journal class that inherits from Resource. It implements its own category(), costFor(), and printDetails() functions.
+- The cost of a journal depends on the number of copies and the subscription period. So, costFor(copies) calculates the cost as unit price × number of copies × subscription years.
+- The subscription period cannot be less than 1 year. If an invalid value is given, the constructor throws std::invalid_argument.
+- I also added Journal to ResourceCategory, categoryName(), and kAllCategories so that journals can be included when setting quotas and displaying budget information.
 
 ## Q2 – EBook
 
@@ -24,9 +22,9 @@ Q1
 
 - AudioBook: I chose ElectronicResource as the base class because an audiobook is a digital resource that can be accessed by users. So it can use the existing seat-based pricing and other features of ElectronicResource. If I derived it directly from Resource, I would have to implement that logic again. Book is also not a good choice because it contains print-book details such as edition and binding. An audiobook only needs to add its narrator and duration, with duration being positive.
 
-- Thesis: I chose Resource directly because a thesis does not really fit the Book class. It does not need things like ISBN, edition, or binding, and it is usually free. Resource already allows the price to be zero, so the normal costFor() can handle it without extra pricing logic. The thesis adds the university, degree, and supervisor information and has its own category.
+- Thesis: I chose Resource directly because a thesis does not really fit the Book class. It does not need things like ISBN, edition, or binding, and it is usually free. Resource already allows the price to be zero, so the price defaults to zero and a thesis needs no special pricing logic of its own. The thesis adds the university, degree, and supervisor information and has its own category. (In Q5, Thesis also overrides costFor() so that it gets the print bulk discount like Book and Journal.)
 
-### Q4 – Hardcover surcharge
+## Q4 – Hardcover surcharge
 
 - I kept `unitPrice()` as the listed price. For hardcover books, I override `costFor()` and add the 20% surcharge there. This means quotes, purchases, quotas and the budget automatically use the correct cost.
 
@@ -44,8 +42,24 @@ Q1
 
 - The discount is applied to the total cost after the hardcover price increase. I use `Money::scaledByPercent()` so the final amount is rounded only once. For Journals, only the number of copies is counted for the 10-copy limit, not the subscription years.
 
-- I kept the original `Resource::costFor()` unchanged. I added `applyPrintBulkDiscount()` as a protected helper in `Resource` and use it in Book, Journal and Thesis, so the same discount logic is not repeated.
+- I kept the original `Resource::costFor()` unchanged. I added `applyPrintBulkDiscount()` as a protected helper in `Resource` and use it in the `costFor()` overrides of Book, Journal and Thesis, so the same discount logic is not repeated.
 
 - For electronic resources, the first 50 seats are charged at the full price and every seat after 50 costs half price. The platform fee is not discounted. This is handled in `ElectronicResource::costFor()`, so EBook and AudioBook get the same behavior automatically.
 
 - Quotas and the overall budget use the discounted cost because they calculate the cost using `costFor()`.
+
+## Q6 – Taxes
+
+- I kept tax separate from the actual pricing. `costFor()` still gives the price before tax. I added a new `TaxPolicy` class to store the print and electronic tax rates. Both rates are 0% by default, and the setters only allow values from 0 to 100.
+
+- I use `isDigital()` to decide which tax rate to apply. Electronic resources, EBooks and AudioBooks use the electronic tax rate, while Books, Journals and Theses use the print tax rate.
+
+- Tax is calculated once for each order using the pre-tax cost. I use `Money::scaledByPercent()` so the tax is rounded half away from zero.
+
+- Quotas and the overall budget are checked using the price after tax. This means an order that fits before tax can still be rejected if the post-tax amount exceeds a quota or the available budget.
+
+- `PurchaseRecord::cost` stores the final amount charged after tax. I also added `preTaxCost` and `tax` so the report can show all three amounts. `totalSpent()` also uses the post-tax amount, so it stays consistent with the budget.
+
+- The report now shows the total pre-tax amount, total tax and total post-tax amount. The existing `quote()` still gives the pre-tax price, while `quoteWithTax()` gives the price including tax.
+
+- One limitation is that the tax rates are whole percentages, so values like 12.5% cannot be represented. Supporting such rates would require using a finer unit such as basis points.

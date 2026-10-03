@@ -423,6 +423,95 @@ static void testBulkDiscounts()
     CHECK(acq.purchase("B1", 10).cost == Money::of(900)); // 1000 undiscounted would not fit 950
     CHECK(acq.purchase("R1", 60).cost == Money::of(550)); // 600 undiscounted would not fit 560
 }
+static void testTaxes()
+{
+    // Group 1: TaxPolicy on its own
+    TaxPolicy none;
+    CHECK(none.printPercent() == 0 && none.electronicPercent() == 0); // default: no tax
+
+    TaxPolicy tp(5, 18);
+    CHECK(tp.printPercent() == 5 && tp.electronicPercent() == 18);
+    tp.setPrintPercent(12);
+    CHECK(tp.printPercent() == 12);
+    tp.setPrintPercent(5);
+    CHECK_THROWS(TaxPolicy(-1, 0), std::invalid_argument);
+    CHECK_THROWS(TaxPolicy(0, 101), std::invalid_argument);
+    CHECK_THROWS(tp.setElectronicPercent(-5), std::invalid_argument);
+
+    Book book("B1", "T", {"A"}, "i", "P", 2020, Money::of(100));
+    Journal journal("J1", "T", "i", "P", 2026, Money::of(100), 12);
+    Thesis thesis("T1", "T", "U", DegreeLevel::Master, "S", 2024);
+    ElectronicResource eres("R1", "DB", "P", 2026, Money::of(10), "url");
+    EBook ebook("E1", "T", {"A"}, "i", "P", 2020, Money::of(10), "url", FileFormat::PDF,
+                false);
+    AudioBook audio("A1", "T", "P", 2020, Money::of(10), "url",
+                    LicenseModel::AnnualSubscription, Money{}, "N", 60);
+    CHECK(tp.rateFor(book) == 5 && tp.rateFor(journal) == 5 && tp.rateFor(thesis) == 5);
+    CHECK(tp.rateFor(eres) == 18 && tp.rateFor(ebook) == 18 && tp.rateFor(audio) == 18);
+    CHECK(tp.taxOn(book, Money::of(200)) == Money::of(10));             // 5% of 200
+    CHECK(tp.taxOn(eres, Money::of(200)) == Money::of(36));             // 18% of 200
+    CHECK(tp.taxOn(book, Money::fromMinor(10)) == Money::fromMinor(1)); // 0.005 -> 0.01
+
+    // Group 2: AcquisitionManager with taxes
+    Catalog c;
+    c.emplace<Book>("B1", "T", std::vector<std::string>{"A"}, "i", "P", 2020, Money::of(100));
+    c.emplace<ElectronicResource>("R1", "DB", "P", 2026, Money::of(10), "url",
+                                  LicenseModel::AnnualSubscription, Money::of(100));
+    Budget b(Money::of(10000));
+    AcquisitionManager acq(c, b, TaxPolicy(5, 18));
+    CHECK(acq.quote("B1", 2) == Money::of(200));        // quote() is pre-tax
+    CHECK(acq.quoteWithTax("B1", 2) == Money::of(210)); // 200 + 5%
+
+    const auto &rec = acq.purchase("B1", 2);
+    CHECK(rec.preTaxCost == Money::of(200) && rec.tax == Money::of(10));
+    CHECK(rec.cost == Money::of(210));  // post-tax
+    CHECK(b.spent() == Money::of(210)); // budget is charged post-tax
+    CHECK(c.holdings("B1") == 2);
+
+    const auto &rec2 = acq.purchase("R1", 10); // 100 + 10 * 10 = 200
+    CHECK(rec2.preTaxCost == Money::of(200) && rec2.tax == Money::of(36));
+    CHECK(rec2.cost == Money::of(236));
+
+    CHECK(acq.totalSpentPreTax() == Money::of(400));
+    CHECK(acq.totalTax() == Money::of(46));
+    CHECK(acq.totalSpent() == Money::of(446));
+    CHECK(b.spent() == acq.totalSpent());
+
+    std::ostringstream os;
+    acq.printReport(os);
+    CHECK(os.str().find("Total pre-tax: 400.00") != std::string::npos);
+    CHECK(os.str().find("Total tax: 46.00") != std::string::npos);
+    CHECK(os.str().find("Total spent (post-tax): 446.00") != std::string::npos);
+
+    // The tax rates can be changed later
+    acq.setTaxPolicy(TaxPolicy(10, 0));
+    CHECK(acq.quoteWithTax("B1", 2) == Money::of(220));
+    CHECK(acq.quoteWithTax("R1", 10) == Money::of(200));
+
+    // Group 3: quotas and the budget are checked against the post-tax cost
+    Catalog c2;
+    c2.emplace<Book>("B1", "T", std::vector<std::string>{"A"}, "i", "P", 2020, Money::of(100));
+    Budget b2(Money::of(10000));
+    b2.setQuota(ResourceCategory::Book, {10, Money::of(205)}); // 200 fits, 210 does not
+    AcquisitionManager taxed(c2, b2, TaxPolicy(5, 18));
+    std::string why;
+    CHECK(!taxed.canPurchase("B1", 2, &why));
+    CHECK(why.find("spend quota") != std::string::npos);
+    CHECK_THROWS(taxed.purchase("B1", 2), QuotaExceededError);
+    CHECK(b2.spent() == Money{} && c2.holdings("B1") == 0); // nothing changed
+    CHECK(taxed.history().empty());
+
+    AcquisitionManager untaxed(c2, b2); // same quota, no tax
+    CHECK(untaxed.canPurchase("B1", 2));
+    const auto &free = untaxed.purchase("B1", 2);
+    CHECK(free.tax == Money{} && free.cost == free.preTaxCost); // default rates are 0
+
+    Catalog c3;
+    c3.emplace<Book>("B1", "T", std::vector<std::string>{"A"}, "i", "P", 2020, Money::of(100));
+    Budget b3(Money::of(205)); // overall budget, no quotas
+    AcquisitionManager small(c3, b3, TaxPolicy(5, 18));
+    CHECK_THROWS(small.purchase("B1", 2), BudgetExceededError); // 210 > 205
+}
 
 int main()
 {
@@ -437,6 +526,7 @@ int main()
     testThesis();
     testHardcover();
     testBulkDiscounts();
+    testTaxes();
     std::cout
         << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;
