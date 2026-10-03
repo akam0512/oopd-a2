@@ -19,6 +19,10 @@ namespace bookmgmt
             return "Journal";
         case ResourceCategory::EBook:
             return "EBook";
+        case ResourceCategory::AudioBook:
+            return "AudioBook";
+        case ResourceCategory::Thesis:
+            return "Thesis";
         }
 
         return "Unknown";

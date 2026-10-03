@@ -21,7 +21,9 @@ namespace bookmgmt
         Book,
         ElectronicResource,
         Journal,
-        EBook
+        EBook,
+        AudioBook,
+        Thesis
     };
 
     const char *categoryName(ResourceCategory c);
