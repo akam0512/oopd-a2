@@ -20,7 +20,8 @@ namespace bookmgmt
     {
         Book,
         ElectronicResource,
-        Journal
+        Journal,
+        EBook
     };
 
     const char *categoryName(ResourceCategory c);
