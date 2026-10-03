@@ -24,6 +24,11 @@ int main()
                                         LicenseModel::Perpetual);
     catalog.emplace<Journal>("J001", "Nature", "0028-0836", "Springer Nature", 2026,
                              Money::of(300), 51, 2);
+    catalog.emplace<EBook>("E001", "Effective Modern C++",
+                           std::vector<std::string>{"Scott Meyers"}, "978-1491903995",
+                           "O'Reilly", 2014, Money::of(200), "https://ebooks.example/emc",
+                           FileFormat::PDF, true, LicenseModel::AnnualSubscription,
+                           Money::of(500));
 
     std::cout << "=== Catalog ===\n";
     for (const Resource *r : catalog.all())
@@ -33,11 +38,14 @@ int main()
               << catalog.get("R001");
     std::cout << "\n=== Details of J001 ===\n"
               << catalog.get("J001");
+    std::cout << "\n=== Details of E001 ===\n"
+              << catalog.get("E001");
 
     Budget budget(Money::of(20000));
     budget.setQuota(ResourceCategory::Book, {10, Money::of(8000)});
     budget.setQuota(ResourceCategory::ElectronicResource, {40, Money::of(12000)});
     budget.setQuota(ResourceCategory::Journal, {3, Money::of(2000)});
+    budget.setQuota(ResourceCategory::EBook, {10, Money::of(25000)});
 
     AcquisitionManager acq(catalog, budget);
 
@@ -56,6 +64,8 @@ int main()
         {"X999", 1},  // rejected: unknown id
         {"J001", 2},  // 1200  ok  -> journal spend 1200
         {"J001", 2},  // 1200  rejected: journal unit quota (1 unit left)
+        {"E001", 5},  // 500 + 1000 = 1500  ok
+        {"E001", 8},  // 500 + 1600 = 2100  rejected: e-book unit quota (5 left)
     });
 
     std::cout << "\n=== Acquisition report ===\n";
