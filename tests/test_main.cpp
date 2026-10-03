@@ -207,8 +207,52 @@ static void testJournal()
     const auto &rec = acq.purchase("J1", 1);
     CHECK(rec.approved && rec.cost == Money::of(100));
     CHECK(c.holdings("J1") == 1);
-    CHECK_THROWS(acq.purchase("J1", 2), QuotaExceededError); // only 1 unit left
-    CHECK(c.holdings("J1") == 1);                            // failed purchase changes nothing
+    CHECK_THROWS(acq.purchase("J1", 2), QuotaExceededError);
+    CHECK(c.holdings("J1") == 1);
+}
+static void testEBook()
+{
+    EBook e("E1", "Clean Code (e)", {"Robert C. Martin"}, "978-0132350884",
+            "Prentice Hall", 2008, Money::of(10), "https://ebooks.example/e1",
+            FileFormat::EPUB, true, LicenseModel::AnnualSubscription, Money::of(100));
+    CHECK(e.category() == ResourceCategory::EBook);
+    CHECK(e.isDigital());
+    CHECK(e.isbn() == "978-0132350884");
+    CHECK(e.format() == FileFormat::EPUB);
+    CHECK(e.drmProtected());
+    CHECK(e.platformFee() == Money::of(100));
+    CHECK(e.costFor(5) == Money::of(150));
+
+    const Resource &r = e;
+    CHECK(r.costFor(1) == Money::of(110));
+    CHECK(r.category() == ResourceCategory::EBook);
+
+    std::ostringstream os;
+    os << r;
+    CHECK(os.str().find("platform fee: 100.00") != std::string::npos);
+    CHECK(os.str().find("EPUB") != std::string::npos);
+    CHECK(os.str().find("978-0132350884") != std::string::npos);
+
+    CHECK_THROWS(e.costFor(0), std::invalid_argument);
+    CHECK_THROWS(EBook("E2", "T", {}, "i", "P", 2020, Money::of(10), "url",
+                       FileFormat::PDF, false, LicenseModel::Perpetual, Money::fromMinor(-1)),
+                 std::invalid_argument);
+
+    Catalog c;
+    c.emplace<ElectronicResource>("R1", "DB", "P", 2026, Money::of(10), "url",
+                                  LicenseModel::AnnualSubscription, Money::of(50));
+    c.emplace<EBook>("E1", "Book", std::vector<std::string>{"A"}, "i", "P", 2026,
+                     Money::of(10), "url", FileFormat::PDF, false,
+                     LicenseModel::AnnualSubscription, Money::of(50));
+    Budget b(Money::of(5000));
+    b.setQuota(ResourceCategory::EBook, {5, Money::of(1000)});
+    AcquisitionManager acq(c, b);
+
+    CHECK(acq.purchase("E1", 3).approved);
+    CHECK_THROWS(acq.purchase("E1", 3), QuotaExceededError);
+    CHECK(acq.purchase("R1", 100).approved);
+    CHECK(b.usageFor(ResourceCategory::EBook).units == 3);
+    CHECK(b.usageFor(ResourceCategory::ElectronicResource).units == 100);
 }
 
 int main()
@@ -219,6 +263,7 @@ int main()
     testBudget();
     testAcquisition();
     testJournal();
+    testEBook();
     std::cout << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;
 }
