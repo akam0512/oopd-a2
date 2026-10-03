@@ -254,6 +254,93 @@ static void testEBook()
     CHECK(b.usageFor(ResourceCategory::EBook).units == 3);
     CHECK(b.usageFor(ResourceCategory::ElectronicResource).units == 100);
 }
+static void testAudioBook()
+{
+    AudioBook a("A1", "Project Hail Mary", "Ballantine", 2021, Money::of(10),
+                "https://audio.example/a1", LicenseModel::AnnualSubscription,
+                Money::of(100), "Ray Porter", 480);
+    CHECK(a.category() == ResourceCategory::AudioBook);
+    CHECK(a.isDigital());
+    CHECK(a.narrator() == "Ray Porter");
+    CHECK(a.durationMinutes() == 480);
+    CHECK(a.costFor(5) == Money::of(150));
+
+    const Resource &r = a;
+    CHECK(r.costFor(1) == Money::of(110));
+
+    std::ostringstream os;
+    os << r;
+    CHECK(os.str().find("platform fee: 100.00") != std::string::npos);
+    CHECK(os.str().find("Ray Porter") != std::string::npos);
+    CHECK(os.str().find("480") != std::string::npos);
+
+    // Group 2: bad input
+    CHECK_THROWS(a.costFor(0), std::invalid_argument);
+    CHECK_THROWS(AudioBook("A2", "T", "P", 2020, Money::of(10), "url",
+                           LicenseModel::Perpetual, Money{}, "N", 0),
+                 std::invalid_argument);
+    CHECK_THROWS(AudioBook("A2", "T", "P", 2020, Money::of(10), "url",
+                           LicenseModel::Perpetual, Money{}, "N", -5),
+                 std::invalid_argument);
+
+    // Group 3: own quota through the acquisition manager
+    Catalog c;
+    c.emplace<AudioBook>("A1", "Project Hail Mary", "Ballantine", 2021, Money::of(10),
+                         "https://audio.example/a1", LicenseModel::AnnualSubscription,
+                         Money::of(100), "Ray Porter", 480);
+    Budget b(Money::of(5000));
+    b.setQuota(ResourceCategory::AudioBook, {4, Money::of(1000)});
+    AcquisitionManager acq(c, b);
+
+    CHECK(acq.purchase("A1", 3).approved);
+    CHECK_THROWS(acq.purchase("A1", 2), QuotaExceededError);
+    CHECK(b.usageFor(ResourceCategory::AudioBook).units == 3);
+    CHECK(c.holdings("A1") == 3);
+}
+
+static void testThesis()
+{
+
+    Thesis t("T1", "Deep Learning for Records", "IIT Delhi", DegreeLevel::PhD,
+             "Dr. Rao", 2025);
+    CHECK(t.category() == ResourceCategory::Thesis);
+    CHECK(!t.isDigital());
+    CHECK(t.unitPrice() == Money{});
+    CHECK(t.costFor(3) == Money{});
+    CHECK(t.university() == "IIT Delhi");
+    CHECK(t.degree() == DegreeLevel::PhD);
+    CHECK(t.supervisor() == "Dr. Rao");
+
+    Thesis priced("T2", "Another", "IIT Delhi", DegreeLevel::Master, "Dr. Rao", 2024,
+                  Money::of(50));
+    CHECK(priced.costFor(2) == Money::of(100));
+    std::ostringstream os;
+    os << t;
+    CHECK(os.str().find("degree: PhD") != std::string::npos);
+    CHECK(os.str().find("supervisor: Dr. Rao") != std::string::npos);
+    CHECK(os.str().find("IIT Delhi") != std::string::npos);
+
+    // Group 2: bad input
+    CHECK_THROWS(t.costFor(0), std::invalid_argument);
+    CHECK_THROWS(Thesis("T3", "T", "U", DegreeLevel::Bachelor, "", 2020),
+                 std::invalid_argument);
+    CHECK_THROWS(Thesis("T3", "T", "U", DegreeLevel::Bachelor, "S", 2020,
+                        Money::fromMinor(-1)),
+                 std::invalid_argument);
+    Catalog c;
+    c.emplace<Thesis>("T1", "Deep Learning for Records", "IIT Delhi", DegreeLevel::PhD,
+                      "Dr. Rao", 2025);
+    Budget b(Money::of(100));
+    b.setQuota(ResourceCategory::Thesis, {2, Money::of(0)});
+    AcquisitionManager acq(c, b);
+
+    const auto &rec = acq.purchase("T1", 1);
+    CHECK(rec.approved && rec.cost == Money{});
+    CHECK(c.holdings("T1") == 1);
+    CHECK(b.spent() == Money{});
+    CHECK_THROWS(acq.purchase("T1", 2), QuotaExceededError);
+    CHECK(b.usageFor(ResourceCategory::Thesis).units == 1);
+}
 
 int main()
 {
@@ -264,6 +351,8 @@ int main()
     testAcquisition();
     testJournal();
     testEBook();
+    testAudioBook();
+    testThesis();
     std::cout << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;
 }
