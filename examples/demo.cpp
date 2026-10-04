@@ -135,6 +135,32 @@ int main()
     });
     titleAcq.printReport(std::cout);
     titleBudget.print(std::cout);
+
+    // Q8: cancelling an approved order.
+    std::cout << "\n=== Cancellation (Book quota: at most 2 titles, print tax 5%) ===\n";
+    Catalog cancelCatalog;
+    for (const char *id : {"CB1", "CB2", "CB3"})
+        cancelCatalog.emplace<Book>(id, std::string("Book ") + id,
+                                    std::vector<std::string>{"A. Author"}, "978-0000000000",
+                                    "Publisher", 2020, Money::of(100));
+    Budget cancelBudget(Money::of(10000));
+    cancelBudget.setQuota(ResourceCategory::Book, {50, Money::of(5000), 2});
+    AcquisitionManager cancelAcq(cancelCatalog, cancelBudget, TaxPolicy(5, 0));
+    cancelAcq.processBatch({
+        {"CB1", 2}, // 200 + 10 = 210  ok          (title 1 of 2)
+        {"CB2", 3}, // 300 + 15 = 315  ok          (title 2 of 2)
+        {"CB3", 1}, // rejected: title quota
+    });
+    cancelAcq.cancel(1); // refunds 210, frees CB1's title slot
+    cancelAcq.processBatch({
+        {"CB3", 1}, // 100 + 5 = 105  ok now that CB1's slot is free
+    });
+    cancelAcq.printReport(std::cout);
+    cancelBudget.print(std::cout);
+    std::cout << "Holdings: CB1=" << cancelCatalog.holdings("CB1")
+              << " CB2=" << cancelCatalog.holdings("CB2")
+              << " CB3=" << cancelCatalog.holdings("CB3") << "\n";
+
     // Direct purchase: errors are reported with exceptions
     std::cout << "\n=== Direct purchase that breaks a quota ===\n";
     try

@@ -73,3 +73,21 @@ Q1, Q2, Q3, Q4, Q5, Q6, Q7
 - `Budget::check()` and `Budget::commit()` take an optional `resourceId` argument. `AcquisitionManager` passes the id in `canPurchase`, `purchase` and `processBatch`. Callers that don't pass an id (the old signature) skip the title check, so existing code still works.
 - I added `Budget::titlesRemaining()` and `Usage::titles()`, and the budget report has a new "Titles used/max" column.
 - I stored units per title (a map) instead of a plain set so that Q8 (cancellation) can reduce a title's units and remove the title when it reaches zero.
+
+### Q8 – Cancellation
+
+- I use the order number to identify an order for cancellation. `cancel(orderNo)` only works for an approved order. If the order number is invalid, the order was rejected, it is already a cancellation record, or it was already cancelled, the function throws `std::invalid_argument` and does not change anything.
+
+- I keep the original purchase record unchanged. Instead, I add a separate cancellation record with the same resource details and quantity, but with negative cost, pre-tax cost and tax. The cancellation record is marked separately so it can be shown as `CANCELLED`.
+
+- For the refund, I use the original amounts stored in the purchase record instead of calculating the price again. This is important because the price or tax rate could have changed after the original purchase.
+
+- `Budget::refund()` reverses the changes made by `commit()`. It gives back the category units, category spending and overall budget amount. It checks everything before changing anything, so a failed refund does not partially change the budget.
+
+- The holdings are also reduced by the cancelled quantity. The holdings are checked before the refund, so if the resource is not available, the cancellation fails without changing the budget.
+
+- For the Q7 title limit, I track the units for each title. Cancelling one of multiple orders for the same title keeps that title counted. When all units of a title are cancelled, that title is removed from the tracking, so its slot becomes available again.
+
+- The spending totals include the cancellation records as negative amounts. Rejected orders are not included, so the totals show the actual net spending after cancellations.
+
+- A cancellation always cancels the complete order. It is not possible to cancel only part of an order.

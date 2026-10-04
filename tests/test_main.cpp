@@ -741,6 +741,47 @@ static void testCancel()
     CHECK_THROWS(acq6.cancel(1), NotFoundError);
     CHECK(b6.spent() == Money::of(10) && !acq6.isCancelled(1) && acq6.history().size() == 1);
 }
+static void testCancelReport()
+{
+    Catalog c;
+    for (const char *id : {"B1", "B2"})
+        c.emplace<Book>(id, "T", std::vector<std::string>{"A"}, "i", "P", 2020, Money::of(100));
+    Budget b(Money::of(10000));
+    AcquisitionManager acq(c, b, TaxPolicy(10, 0));
+
+    acq.purchase("B1", 2); // order #1: 200 + 20
+    acq.purchase("B2", 3); // order #2: 300 + 30
+    CHECK(acq.totalSpentPreTax() == Money::of(500));
+    CHECK(acq.totalTax() == Money::of(50));
+    CHECK(acq.totalSpent() == Money::of(550));
+
+    acq.cancel(1);                                   // order #3
+    CHECK(acq.totalSpentPreTax() == Money::of(300)); // totals are net of the refund
+    CHECK(acq.totalTax() == Money::of(30));
+    CHECK(acq.totalSpent() == Money::of(330));
+    CHECK(acq.totalSpent() == b.spent()); // still matches the budget
+    CHECK(acq.totalSpentPreTax() + acq.totalTax() == acq.totalSpent());
+
+    acq.processBatch({{"X9", 1}});             // order #4: rejected
+    CHECK(acq.totalSpent() == Money::of(330)); // rejected orders never count
+
+    std::ostringstream os;
+    acq.printReport(os);
+    const std::string report = os.str();
+    CHECK(report.find("Order history (4 orders)") != std::string::npos);
+    CHECK(report.find("#1   APPROVED  B1") != std::string::npos); // the original is still shown
+    CHECK(report.find("#3   CANCELLED B1") != std::string::npos);
+    CHECK(report.find("-220.00") != std::string::npos);
+    CHECK(report.find("(cancels order #1)") != std::string::npos);
+    CHECK(report.find("#4   REJECTED  X9") != std::string::npos);
+    CHECK(report.find("Total pre-tax: 300.00") != std::string::npos);
+    CHECK(report.find("Total tax: 30.00") != std::string::npos);
+    CHECK(report.find("Total spent (post-tax): 330.00") != std::string::npos);
+
+    acq.cancel(2); // cancel everything
+    CHECK(acq.totalSpent() == Money{} && acq.totalSpentPreTax() == Money{});
+    CHECK(acq.totalTax() == Money{} && b.spent() == Money{});
+}
 
 int main()
 {
@@ -759,6 +800,7 @@ int main()
     testTitleLimit();
     testBudgetRefund();
     testCancel();
+    testCancelReport();
     std::cout
         << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;

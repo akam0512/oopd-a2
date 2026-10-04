@@ -9,6 +9,13 @@
 namespace bookmgmt
 {
 
+    namespace
+    {
+        // Approved orders and cancellations change what was spent (a cancellation
+        // counts as negative amounts); rejected orders do not.
+        bool affectsTotals(const PurchaseRecord &rec) { return rec.approved || rec.cancellation; }
+    } // namespace
+
     AcquisitionManager::AcquisitionManager(Catalog &catalog, Budget &budget, TaxPolicy taxPolicy)
         : catalog_(catalog), budget_(budget), taxPolicy_(taxPolicy) {}
 
@@ -146,7 +153,7 @@ namespace bookmgmt
     {
         Money sum;
         for (const auto &rec : history_)
-            if (rec.approved)
+            if (affectsTotals(rec))
                 sum += rec.cost;
         return sum;
     }
@@ -155,7 +162,7 @@ namespace bookmgmt
     {
         Money sum;
         for (const auto &rec : history_)
-            if (rec.approved)
+            if (affectsTotals(rec))
                 sum += rec.preTaxCost;
         return sum;
     }
@@ -164,7 +171,7 @@ namespace bookmgmt
     {
         Money sum;
         for (const auto &rec : history_)
-            if (rec.approved)
+            if (affectsTotals(rec))
                 sum += rec.tax;
         return sum;
     }
@@ -174,12 +181,16 @@ namespace bookmgmt
         os << "Order history (" << history_.size() << " orders)\n";
         for (const auto &rec : history_)
         {
+            const char *status =
+                rec.cancellation ? "CANCELLED" : (rec.approved ? "APPROVED" : "REJECTED");
             os << "  #" << std::setw(3) << std::left << rec.orderNo << " "
-               << (rec.approved ? "APPROVED" : "REJECTED") << "  " << std::setw(6)
+               << std::setw(10) << status << std::setw(6)
                << rec.resourceId << " x" << std::setw(3) << rec.quantity << " "
                << std::setw(12) << std::right << rec.cost.toString() << std::left << "  "
                << rec.title;
-            if (!rec.approved)
+            if (rec.cancellation)
+                os << "  (cancels order #" << rec.cancelsOrderNo << ")";
+            if (!rec.approved && !rec.cancellation)
                 os << "\n        reason: " << rec.reason;
             os << "\n";
         }
