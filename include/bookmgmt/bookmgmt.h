@@ -14,3 +14,4 @@
 #include "bookmgmt/Money.h"
 #include "bookmgmt/Resource.h"
 #include "bookmgmt/Tax.h"
+#include "bookmgmt/Department.h"

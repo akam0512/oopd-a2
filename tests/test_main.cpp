@@ -4,6 +4,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <map>
 
 #include "bookmgmt/bookmgmt.h"
 
@@ -782,6 +783,32 @@ static void testCancelReport()
     CHECK(acq.totalSpent() == Money{} && acq.totalSpentPreTax() == Money{});
     CHECK(acq.totalTax() == Money{} && b.spent() == Money{});
 }
+static void testDepartment()
+{
+    Department cs("Computer Science");
+    CHECK(cs.name() == "Computer Science");
+    CHECK(cs == Department("Computer Science"));
+    CHECK(cs != Department("Physics"));
+    CHECK(Department("Physics") != Department("physics")); // names are case-sensitive
+    CHECK(Department::general().name() == "General");
+    CHECK(Department::general() == Department("General"));
+
+    CHECK_THROWS(Department(""), std::invalid_argument);
+    CHECK_THROWS(Department("   "), std::invalid_argument);
+
+    // Ordered by name, so it works as a map key
+    std::map<Department, int> m;
+    m[Department("Physics")] = 1;
+    m[Department("Chemistry")] = 2;
+    m[Department("Physics")] += 10;
+    CHECK(m.size() == 2);
+    CHECK(m.at(Department("Physics")) == 11);
+    CHECK(m.begin()->first == Department("Chemistry")); // Chemistry < Physics
+
+    std::ostringstream os;
+    os << cs;
+    CHECK(os.str() == "Computer Science");
+}
 
 int main()
 {
@@ -801,6 +828,7 @@ int main()
     testBudgetRefund();
     testCancel();
     testCancelReport();
+    testDepartment();
     std::cout
         << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;
