@@ -576,6 +576,64 @@ static void testTitleLimit()
     CHECK(!res[0].approved && res[0].reason.find("title quota") != std::string::npos);
     CHECK(res[1].approved);
 }
+static void testBudgetRefund()
+{
+    Budget b(Money::of(1000));
+    b.setQuota(ResourceCategory::Book, {10, Money::of(500), 2}); // at most 2 titles
+    b.commit(ResourceCategory::Book, 2, Money::of(100), "B1");
+    b.commit(ResourceCategory::Book, 3, Money::of(150), "B2");
+    CHECK(b.spent() == Money::of(250));
+    CHECK(b.usageFor(ResourceCategory::Book).units == 5);
+    CHECK(b.usageFor(ResourceCategory::Book).titles() == 2);
+    CHECK(!b.check(ResourceCategory::Book, 1, Money::of(10), "B3").empty()); // title limit reached
+
+    // Refunding part of a title: money and units come back, the title still counts
+    b.refund(ResourceCategory::Book, 1, Money::of(50), "B1");
+    CHECK(b.spent() == Money::of(200));
+    CHECK(b.usageFor(ResourceCategory::Book).units == 4);
+    CHECK(b.usageFor(ResourceCategory::Book).spent == Money::of(200));
+    CHECK(b.usageFor(ResourceCategory::Book).titles() == 2);
+    CHECK(!b.check(ResourceCategory::Book, 1, Money::of(10), "B3").empty()); // still blocked
+
+    // Refunding the rest of the title: it stops counting, so a new title fits
+    b.refund(ResourceCategory::Book, 1, Money::of(50), "B1");
+    CHECK(b.usageFor(ResourceCategory::Book).titles() == 1);
+    CHECK(b.titlesRemaining(ResourceCategory::Book) == 1);
+    CHECK(b.check(ResourceCategory::Book, 1, Money::of(10), "B3").empty());
+    CHECK(b.spent() == Money::of(150));
+    CHECK(b.remaining() == Money::of(850));
+    CHECK(b.unitsRemaining(ResourceCategory::Book) == 7);
+    CHECK(b.spendRemaining(ResourceCategory::Book) == Money::of(350));
+
+    // A refund larger than what was bought is rejected and changes nothing
+    CHECK_THROWS(b.refund(ResourceCategory::Book, 4, Money::of(10), "B2"), std::invalid_argument);
+    CHECK_THROWS(b.refund(ResourceCategory::Book, 1, Money::of(10), "B9"), std::invalid_argument);
+    CHECK_THROWS(b.refund(ResourceCategory::Book, 1, Money::of(9999), "B2"), std::invalid_argument);
+    CHECK_THROWS(b.refund(ResourceCategory::Book, 0, Money::of(10), "B2"), std::invalid_argument);
+    CHECK_THROWS(b.refund(ResourceCategory::Book, 1, Money::fromMinor(-1), "B2"),
+                 std::invalid_argument);
+    CHECK_THROWS(b.refund(ResourceCategory::Journal, 1, Money::of(10), "J1"),
+                 std::invalid_argument); // nothing bought there
+    CHECK(b.spent() == Money::of(150));
+    CHECK(b.usageFor(ResourceCategory::Book).units == 3);
+    CHECK(b.usageFor(ResourceCategory::Book).titles() == 1);
+
+    // Free purchases can be refunded as well
+    Budget f(Money::of(10));
+    f.commit(ResourceCategory::Thesis, 2, Money{}, "T1");
+    f.refund(ResourceCategory::Thesis, 2, Money{}, "T1");
+    CHECK(f.usageFor(ResourceCategory::Thesis).units == 0);
+    CHECK(f.usageFor(ResourceCategory::Thesis).titles() == 0);
+
+    // Refunded room can be used again
+    Budget r(Money::of(100));
+    r.setQuota(ResourceCategory::Book, {2, Money::of(100)});
+    r.commit(ResourceCategory::Book, 2, Money::of(100), "B1");
+    CHECK(!r.check(ResourceCategory::Book, 1, Money::of(1), "B1").empty()); // quota and budget full
+    r.refund(ResourceCategory::Book, 2, Money::of(100), "B1");
+    r.commit(ResourceCategory::Book, 2, Money::of(100), "B1");
+    CHECK(r.spent() == Money::of(100));
+}
 
 int main()
 {
@@ -592,6 +650,7 @@ int main()
     testBulkDiscounts();
     testTaxes();
     testTitleLimit();
+    testBudgetRefund();
     std::cout
         << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;

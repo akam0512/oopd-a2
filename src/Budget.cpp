@@ -152,6 +152,41 @@ namespace bookmgmt
             u.unitsByTitle[resourceId] += units;
         spent_ += cost;
     }
+    void Budget::refund(ResourceCategory c, int units, Money cost,
+                        const std::string &resourceId)
+    {
+        if (units <= 0)
+            throw std::invalid_argument("refund quantity must be positive");
+        if (cost.isNegative())
+            throw std::invalid_argument("refund amount must not be negative");
+
+        // Check everything first, so a failed refund changes nothing.
+        auto usageIt = usage_.find(c);
+        if (usageIt == usage_.end() || units > usageIt->second.units ||
+            cost > usageIt->second.spent)
+            throw std::invalid_argument(std::string("refund is larger than what was bought in ") +
+                                        categoryName(c));
+
+        Usage &u = usageIt->second;
+        auto titleIt = u.unitsByTitle.end();
+        if (!resourceId.empty())
+        {
+            titleIt = u.unitsByTitle.find(resourceId);
+            if (titleIt == u.unitsByTitle.end() || units > titleIt->second)
+                throw std::invalid_argument("refund is larger than what was bought of " +
+                                            resourceId);
+        }
+
+        u.units -= units;
+        u.spent -= cost;
+        spent_ -= cost;
+        if (titleIt != u.unitsByTitle.end())
+        {
+            titleIt->second -= units;
+            if (titleIt->second == 0)
+                u.unitsByTitle.erase(titleIt); // title no longer held
+        }
+    }
 
     void Budget::print(std::ostream &os) const
     {

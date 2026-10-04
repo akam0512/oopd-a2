@@ -68,7 +68,13 @@ namespace bookmgmt
         // (and changes nothing) if it would not fit.
         void commit(ResourceCategory c, int units, Money cost,
                     const std::string &resourceId = {});
-
+        // Q8: the opposite of commit(). Gives back `units` and `cost` in the
+        // category and overall, and removes the units from the title's count (the
+        // title stops counting once none of its units are left). Throws
+        // std::invalid_argument, changing nothing, if the refund is larger than
+        // what was bought.
+        void refund(ResourceCategory c, int units, Money cost,
+                    const std::string &resourceId = {});
         void print(std::ostream &os) const;
 
     private:
