@@ -2,7 +2,7 @@
 
 ## Attempted questions
 
-Q1, Q2, Q3, Q4, Q5
+Q1, Q2, Q3, Q4, Q5, Q6, Q7
 
 ## Q1 – Journal
 
@@ -63,3 +63,13 @@ Q1, Q2, Q3, Q4, Q5
 - The report now shows the total pre-tax amount, total tax and total post-tax amount. The existing `quote()` still gives the pre-tax price, while `quoteWithTax()` gives the price including tax.
 
 - One limitation is that the tax rates are whole percentages, so values like 12.5% cannot be represented. Supporting such rates would require using a finer unit such as basis points.
+
+## Q7 – Limit on different titles per category
+
+- I added an optional `maxTitles` field to `Quota`. It defaults to "no limit" (`Quota::kNoLimit`), so every existing `{units, spend}` quota behaves exactly as before. A limit of 0 means no title can be bought in that category, and a negative limit is rejected by `setQuota` with `std::invalid_argument`.
+- A "title" is a distinct resource id within a category. `Budget` keeps a map from title id to units bought for each category, so buying more copies of a title already bought does not increase the title count. Titles are counted per category: a Journal title does not count against the Book limit.
+- If a purchase would add a new title when the category has already reached `maxTitles`, it is rejected with a `QuotaExceededError` (`Book title quota exceeded: ...`) and nothing changes.
+- The checks now run in this order: input, unit quota, title quota, spend quota, overall budget. I put the title check right after the unit quota because both are count limits.
+- `Budget::check()` and `Budget::commit()` take an optional `resourceId` argument. `AcquisitionManager` passes the id in `canPurchase`, `purchase` and `processBatch`. Callers that don't pass an id (the old signature) skip the title check, so existing code still works.
+- I added `Budget::titlesRemaining()` and `Usage::titles()`, and the budget report has a new "Titles used/max" column.
+- I stored units per title (a map) instead of a plain set so that Q8 (cancellation) can reduce a title's units and remove the title when it reaches zero.

@@ -38,7 +38,7 @@ namespace bookmgmt
             if (quantity <= 0)
                 why = "quantity must be positive";
             else
-                why = budget_.check(r->category(), quantity, pricing(*r, quantity).total());
+                why = budget_.check(r->category(), quantity, pricing(*r, quantity).total(), id);
         }
         else
         {
@@ -65,7 +65,7 @@ namespace bookmgmt
         const Resource &r = catalog_.get(id);       // may throw NotFoundError
         const Pricing price = pricing(r, quantity); // may throw invalid_argument
         // Quotas and the budget are checked against the post-tax cost.
-        budget_.commit(r.category(), quantity, price.total()); // may throw quota/budget errors
+        budget_.commit(r.category(), quantity, price.total(), id); // may throw quota/budget errors
         catalog_.addHoldings(id, quantity);
         return record(&r, id, quantity, price, true, {});
     }
@@ -91,7 +91,7 @@ namespace bookmgmt
             else
             {
                 price = pricing(*r, req.quantity);
-                why = budget_.check(r->category(), req.quantity, price.total());
+                why = budget_.check(r->category(), req.quantity, price.total(), req.resourceId);
             }
 
             if (why.empty())

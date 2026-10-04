@@ -512,6 +512,70 @@ static void testTaxes()
     AcquisitionManager small(c3, b3, TaxPolicy(5, 18));
     CHECK_THROWS(small.purchase("B1", 2), BudgetExceededError); // 210 > 205
 }
+static void testTitleLimit()
+{
+    // Group 1: Budget on its own
+    Budget b(Money::of(10000));
+    b.setQuota(ResourceCategory::Book, {100, Money::of(5000), 2}); // at most 2 different titles
+    CHECK(b.titlesRemaining(ResourceCategory::Book) == 2);
+
+    b.commit(ResourceCategory::Book, 1, Money::of(10), "B1");
+    b.commit(ResourceCategory::Book, 1, Money::of(10), "B2");
+    CHECK(b.usageFor(ResourceCategory::Book).titles() == 2);
+    CHECK(b.titlesRemaining(ResourceCategory::Book) == 0);
+
+    b.commit(ResourceCategory::Book, 3, Money::of(30), "B1"); // same title again: allowed
+    CHECK(b.usageFor(ResourceCategory::Book).titles() == 2);
+    CHECK(b.usageFor(ResourceCategory::Book).units == 5);
+
+    CHECK(b.check(ResourceCategory::Book, 1, Money::of(10), "B1").empty());
+    const std::string why = b.check(ResourceCategory::Book, 1, Money::of(10), "B3");
+    CHECK(why.find("title quota") != std::string::npos); // a third title is rejected
+    CHECK_THROWS(b.commit(ResourceCategory::Book, 1, Money::of(10), "B3"), QuotaExceededError);
+    CHECK(b.usageFor(ResourceCategory::Book).units == 5); // failed commit changed nothing
+    CHECK(b.usageFor(ResourceCategory::Book).titles() == 2);
+
+    // Other categories are counted separately, and are unlimited unless a limit is set
+    b.setQuota(ResourceCategory::Journal, {100, Money::of(5000)});
+    CHECK(!b.titlesRemaining(ResourceCategory::Journal).has_value());
+    b.commit(ResourceCategory::Journal, 1, Money::of(10), "J1");
+    b.commit(ResourceCategory::Journal, 1, Money::of(10), "J2");
+    b.commit(ResourceCategory::Journal, 1, Money::of(10), "J3");
+    CHECK(b.usageFor(ResourceCategory::Journal).titles() == 3);
+    CHECK(!b.titlesRemaining(ResourceCategory::ElectronicResource).has_value()); // no quota at all
+
+    // Callers that give no title id are not title-limited (old behaviour)
+    b.commit(ResourceCategory::Book, 1, Money::of(10));
+    CHECK(b.usageFor(ResourceCategory::Book).titles() == 2);
+
+    // A limit of 0 means no title may be bought; negative limits are invalid
+    Budget zero(Money::of(1000));
+    zero.setQuota(ResourceCategory::Book, {10, Money::of(1000), 0});
+    CHECK(!zero.check(ResourceCategory::Book, 1, Money::of(1), "B1").empty());
+    CHECK_THROWS(zero.setQuota(ResourceCategory::Book, {10, Money::of(1000), -1}),
+                 std::invalid_argument);
+
+    // Group 2: through the AcquisitionManager
+    Catalog c;
+    for (const char *id : {"B1", "B2", "B3"})
+        c.emplace<Book>(id, "T", std::vector<std::string>{"A"}, "i", "P", 2020, Money::of(10));
+    Budget b2(Money::of(10000));
+    b2.setQuota(ResourceCategory::Book, {100, Money::of(5000), 2});
+    AcquisitionManager acq(c, b2);
+
+    CHECK(acq.purchase("B1", 2).approved);
+    CHECK(acq.purchase("B2", 1).approved);
+    std::string reason;
+    CHECK(!acq.canPurchase("B3", 1, &reason));
+    CHECK(reason.find("title quota") != std::string::npos);
+    CHECK_THROWS(acq.purchase("B3", 1), QuotaExceededError);
+    CHECK(c.holdings("B3") == 0);
+    CHECK(acq.purchase("B1", 5).approved); // existing title: fine
+
+    const auto res = acq.processBatch({{"B3", 1}, {"B2", 1}});
+    CHECK(!res[0].approved && res[0].reason.find("title quota") != std::string::npos);
+    CHECK(res[1].approved);
+}
 
 int main()
 {
@@ -527,6 +591,7 @@ int main()
     testHardcover();
     testBulkDiscounts();
     testTaxes();
+    testTitleLimit();
     std::cout
         << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;

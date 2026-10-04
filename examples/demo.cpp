@@ -117,6 +117,24 @@ int main()
     });
     taxed.printReport(std::cout);
     taxBudget.print(std::cout);
+    // Q7: a limit on the number of different titles per category.
+    std::cout << "\n=== Title limit (Book quota: at most 2 different titles) ===\n";
+    Catalog titleCatalog;
+    for (const char *id : {"TL1", "TL2", "TL3"})
+        titleCatalog.emplace<Book>(id, std::string("Book ") + id,
+                                   std::vector<std::string>{"A. Author"}, "978-0000000000",
+                                   "Publisher", 2020, Money::of(100));
+    Budget titleBudget(Money::of(10000));
+    titleBudget.setQuota(ResourceCategory::Book, {50, Money::of(5000), 2});
+    AcquisitionManager titleAcq(titleCatalog, titleBudget);
+    titleAcq.processBatch({
+        {"TL1", 1}, // new title (1 of 2)  ok
+        {"TL2", 1}, // new title (2 of 2)  ok
+        {"TL3", 1}, // third title         rejected: title quota
+        {"TL1", 3}, // title already bought  ok
+    });
+    titleAcq.printReport(std::cout);
+    titleBudget.print(std::cout);
     // Direct purchase: errors are reported with exceptions
     std::cout << "\n=== Direct purchase that breaks a quota ===\n";
     try
