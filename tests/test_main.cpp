@@ -809,6 +809,102 @@ static void testDepartment()
     os << cs;
     CHECK(os.str() == "Computer Science");
 }
+static void testDepartmentBudgets()
+{
+    Catalog c;
+    for (const char *id : {"B1", "B2"})
+        c.emplace<Book>(id, "T", std::vector<std::string>{"A"}, "i", "P", 2020, Money::of(100));
+    Budget csBudget(Money::of(1000));
+    csBudget.setQuota(ResourceCategory::Book, {10, Money::of(800)});
+    Budget physBudget(Money::of(300));
+    physBudget.setQuota(ResourceCategory::Book, {5, Money::of(250), 1}); // at most 1 title
+    const Department cs("Computer Science"), phys("Physics");
+
+    AcquisitionManager acq(c); // no budgets yet
+    acq.addDepartment(cs, csBudget);
+    acq.addDepartment(phys, physBudget);
+    CHECK(acq.departments().size() == 2);
+    CHECK(&acq.budgetFor(cs) == &csBudget);
+
+    // A purchase is charged to the department it names, and only to it
+    const auto &r1 = acq.purchase("B1", 3, cs);
+    CHECK(r1.approved && r1.department == cs && r1.cost == Money::of(300));
+    CHECK(csBudget.spent() == Money::of(300) && physBudget.spent() == Money{});
+    CHECK(c.holdings("B1") == 3); // holdings are shared
+    acq.purchase("B1", 2, phys);
+    CHECK(physBudget.spent() == Money::of(200) && csBudget.spent() == Money::of(300));
+    CHECK(c.holdings("B1") == 5);
+
+    // Each department has its own quotas
+    std::string why;
+    CHECK(!acq.canPurchase("B1", 1, phys, &why)); // 200 + 100 > spend quota 250
+    CHECK(why.find("spend quota") != std::string::npos);
+    CHECK(acq.canPurchase("B1", 1, cs));
+    CHECK_THROWS(acq.purchase("B1", 1, phys), QuotaExceededError);
+    CHECK(!acq.canPurchase("B2", 1, phys, &why)); // Physics: only 1 title allowed
+    CHECK(why.find("title quota") != std::string::npos);
+    CHECK(acq.canPurchase("B2", 1, cs)); // CS has no title limit
+
+    // Unknown department
+    const Department chem("Chemistry");
+    CHECK_THROWS(acq.purchase("B1", 1, chem), UnknownDepartmentError);
+    CHECK(!acq.canPurchase("B1", 1, chem, &why));
+    CHECK(why == "unknown department: Chemistry");
+    CHECK_THROWS(acq.purchase("B1", 1), UnknownDepartmentError); // General is not registered here
+    CHECK_THROWS(acq.budgetFor(chem), UnknownDepartmentError);
+    CHECK(c.holdings("B1") == 5 && csBudget.spent() == Money::of(300)); // nothing changed
+
+    // Batch: each request names its department (or none: General)
+    const auto res = acq.processBatch({
+        {"B1", 2, cs},   // ok
+        {"B1", 1, phys}, // rejected: Physics spend quota
+        {"B1", 1, chem}, // rejected: unknown department
+        {"B1", 1},       // no department -> General, not registered here
+    });
+    CHECK(res[0].approved && res[0].department == cs);
+    CHECK(!res[1].approved && res[1].reason.find("spend quota") != std::string::npos);
+    CHECK(!res[2].approved && res[2].reason == "unknown department: Chemistry");
+    CHECK(!res[3].approved && res[3].reason == "unknown department: General");
+    CHECK(res[1].department == phys && res[3].department == Department::general());
+    CHECK(csBudget.spent() == Money::of(500));
+
+    // Registering departments: no duplicates, and a Budget cannot be shared
+    CHECK_THROWS(acq.addDepartment(cs, physBudget), std::invalid_argument);
+    CHECK_THROWS(acq.addDepartment(Department("Math"), csBudget), std::invalid_argument);
+    Budget mathBudget(Money::of(10));
+    acq.addDepartment(Department("Math"), mathBudget);
+    CHECK(acq.departments().size() == 3);
+
+    // The single-budget constructor charges everyone to "General", as before
+    Catalog c2;
+    c2.emplace<Book>("B1", "T", std::vector<std::string>{"A"}, "i", "P", 2020, Money::of(100));
+    Budget single(Money::of(1000));
+    AcquisitionManager legacy(c2, single);
+    CHECK(legacy.purchase("B1", 2).department == Department::general());
+    CHECK(single.spent() == Money::of(200));
+    CHECK(legacy.canPurchase("B1", 1));
+    CHECK(legacy.departments().size() == 1);
+    Budget art(Money::of(500));
+    legacy.addDepartment(Department("Art"), art); // more can be added later
+    legacy.purchase("B1", 1, Department("Art"));
+    CHECK(art.spent() == Money::of(100) && single.spent() == Money::of(200));
+
+    // Cancelling refunds the department the order was charged to
+    Catalog c3;
+    c3.emplace<Book>("B1", "T", std::vector<std::string>{"A"}, "i", "P", 2020, Money::of(100));
+    Budget csB(Money::of(1000)), physB(Money::of(1000));
+    AcquisitionManager acq3(c3);
+    acq3.addDepartment(cs, csB);
+    acq3.addDepartment(phys, physB);
+    acq3.purchase("B1", 2, cs);   // order #1
+    acq3.purchase("B1", 3, phys); // order #2
+    const PurchaseRecord cr = acq3.cancel(2);
+    CHECK(cr.cancellation && cr.department == phys);
+    CHECK(physB.spent() == Money{} && csB.spent() == Money::of(200));
+    CHECK(c3.holdings("B1") == 2);
+    acq3.cancel(1);
+    CHECK(csB.spent() == Money{} && c3.holdings("B1") == 0);
+}
 
 int main()
 {
@@ -829,6 +925,7 @@ int main()
     testCancel();
     testCancelReport();
     testDepartment();
+    testDepartmentBudgets();
     std::cout
         << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;
