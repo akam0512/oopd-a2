@@ -251,6 +251,21 @@ namespace bookmgmt
         return sum;
     }
 
+    DepartmentTotals AcquisitionManager::totalsFor(const Department &department) const
+    {
+        lookupBudget(department); // throws UnknownDepartmentError if it has no budget
+        DepartmentTotals totals;
+        for (const auto &rec : history_)
+        {
+            if (rec.department != department || !affectsTotals(rec))
+                continue;
+            totals.preTax += rec.preTaxCost;
+            totals.tax += rec.tax;
+            totals.postTax += rec.cost;
+        }
+        return totals;
+    }
+
     void AcquisitionManager::printReport(std::ostream &os) const
     {
         os << "Order history (" << history_.size() << " orders)\n";
@@ -263,6 +278,8 @@ namespace bookmgmt
                << rec.resourceId << " x" << std::setw(3) << rec.quantity << " "
                << std::setw(12) << std::right << rec.cost.toString() << std::left << "  "
                << rec.title;
+            if (rec.department != Department::general())
+                os << "  [" << rec.department << "]";
             if (rec.cancellation)
                 os << "  (cancels order #" << rec.cancelsOrderNo << ")";
             if (!rec.approved && !rec.cancellation)
@@ -272,6 +289,26 @@ namespace bookmgmt
         os << "Total pre-tax: " << totalSpentPreTax() << "\n";
         os << "Total tax: " << totalTax() << "\n";
         os << "Total spent (post-tax): " << totalSpent() << "\n";
+
+        if (budgets_.size() > 1)
+        { // with a single budget there is nothing to split
+            os << "By department:\n";
+            for (const auto &entry : budgets_)
+            {
+                const DepartmentTotals t = totalsFor(entry.first);
+                os << "  " << std::setw(20) << std::left << entry.first.name() << " pre-tax "
+                   << t.preTax << ", tax " << t.tax << ", post-tax " << t.postTax << "\n";
+            }
+        }
+    }
+
+    void AcquisitionManager::printBudgets(std::ostream &os) const
+    {
+        for (const auto &entry : budgets_)
+        {
+            os << "Department: " << entry.first << "\n";
+            entry.second->print(os);
+        }
     }
 
 } // namespace bookmgmt

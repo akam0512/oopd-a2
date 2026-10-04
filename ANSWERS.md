@@ -91,3 +91,25 @@ Q1, Q2, Q3, Q4, Q5, Q6, Q7
 - The spending totals include the cancellation records as negative amounts. Rejected orders are not included, so the totals show the actual net spending after cancellations.
 
 - A cancellation always cancels the complete order. It is not possible to cancel only part of an order.
+
+### Q9 – Department budgets
+
+- I created a separate `Department` type instead of using a normal string. This makes department names safer to use and avoids accidentally mixing them with other strings.
+
+- `AcquisitionManager` keeps a separate `Budget` for each department. A department must be registered only once, and the same `Budget` cannot be shared between two departments.
+
+- Since each department has its own `Budget`, it also has its own overall budget, category quotas, title limits and usage.
+
+- A purchase request includes the department it belongs to. The purchase is checked and charged only to that department's budget.
+
+- I kept the old `AcquisitionManager(catalog, budget)` constructor working by treating that budget as the `"General"` department. This keeps the earlier code working without changes.
+
+- If an unknown department is used, the purchase is rejected with an appropriate error/reason. The same applies when checking a purchase.
+
+- Each purchase record stores its department. This is important for cancellation because the money and quota usage must be returned to the same department's budget.
+
+- Holdings remain shared in the catalog, so they represent the library's total holdings across all departments.
+
+- The report can show the department for each purchase and can also show totals for each department. `printBudgets()` shows the budget of every department.
+
+- Taxes continue to use the same tax policy for the whole `AcquisitionManager`; they are not separate for each department.

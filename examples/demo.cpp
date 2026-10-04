@@ -161,6 +161,35 @@ int main()
               << " CB2=" << cancelCatalog.holdings("CB2")
               << " CB3=" << cancelCatalog.holdings("CB3") << "\n";
 
+    // Q9: department budgets. Each department has its own budget and quotas.
+    std::cout << "\n=== Departments ===\n";
+    Catalog deptCatalog;
+    for (const char *id : {"DB1", "DB2"})
+        deptCatalog.emplace<Book>(id, std::string("Book ") + id,
+                                  std::vector<std::string>{"A. Author"}, "978-0000000000",
+                                  "Publisher", 2020, Money::of(100));
+    const Department cs("Computer Science"), physics("Physics");
+    Budget csBudget(Money::of(5000));
+    csBudget.setQuota(ResourceCategory::Book, {20, Money::of(3000)});
+    Budget physicsBudget(Money::of(1000));
+    physicsBudget.setQuota(ResourceCategory::Book, {10, Money::of(500), 1}); // at most 1 title
+    AcquisitionManager deptAcq(deptCatalog);
+    deptAcq.addDepartment(cs, csBudget);
+    deptAcq.addDepartment(physics, physicsBudget);
+    deptAcq.processBatch({
+        {"DB1", 4, cs},                      // 400  ok
+        {"DB1", 3, physics},                 // 300  ok
+        {"DB2", 1, physics},                 // rejected: Physics may buy only 1 title
+        {"DB1", 3, physics},                 // 300  rejected: Physics spend quota (200 left)
+        {"DB1", 2, Department("Chemistry")}, // rejected: unknown department
+        {"DB2", 5, cs},                      // 500  ok
+    });
+    deptAcq.cancel(2); // refunds Physics' 300 (order #2)
+    deptAcq.processBatch({
+        {"DB2", 2, physics}, // 200  ok: Physics' title slot is free again
+    });
+    deptAcq.printReport(std::cout);
+    deptAcq.printBudgets(std::cout);
     // Direct purchase: errors are reported with exceptions
     std::cout << "\n=== Direct purchase that breaks a quota ===\n";
     try

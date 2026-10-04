@@ -905,6 +905,60 @@ static void testDepartmentBudgets()
     acq3.cancel(1);
     CHECK(csB.spent() == Money{} && c3.holdings("B1") == 0);
 }
+static void testDepartmentReport()
+{
+    Catalog c;
+    c.emplace<Book>("B1", "Clean Code", std::vector<std::string>{"A"}, "i", "P", 2020,
+                    Money::of(100));
+    Budget csB(Money::of(1000)), physB(Money::of(1000));
+    const Department cs("Computer Science"), phys("Physics");
+    AcquisitionManager acq(c, TaxPolicy(10, 0));
+    acq.addDepartment(cs, csB);
+    acq.addDepartment(phys, physB);
+
+    acq.purchase("B1", 2, cs);                        // 200 + 20 = 220
+    acq.purchase("B1", 3, phys);                      // 300 + 30 = 330   (order #2)
+    acq.cancel(2);                                    // order #3
+    acq.processBatch({{"B1", 1, Department("Art")}}); // order #4: rejected
+
+    // Totals per department are net of cancellations
+    const DepartmentTotals csT = acq.totalsFor(cs);
+    CHECK(csT.preTax == Money::of(200) && csT.tax == Money::of(20) && csT.postTax == Money::of(220));
+    const DepartmentTotals physT = acq.totalsFor(phys);
+    CHECK(physT.preTax == Money{} && physT.tax == Money{} && physT.postTax == Money{});
+    CHECK(csT.postTax + physT.postTax == acq.totalSpent());
+    CHECK(csB.spent() == csT.postTax && physB.spent() == physT.postTax);
+    CHECK_THROWS(acq.totalsFor(Department("Art")), UnknownDepartmentError);
+
+    std::ostringstream os;
+    acq.printReport(os);
+    const std::string report = os.str();
+    CHECK(report.find("Clean Code  [Computer Science]") != std::string::npos);
+    CHECK(report.find("Clean Code  [Physics]  (cancels order #2)") != std::string::npos);
+    CHECK(report.find("[Art]") != std::string::npos); // the rejected order names its department
+    CHECK(report.find("By department:") != std::string::npos);
+    CHECK(report.find("Computer Science") != std::string::npos);
+    CHECK(report.find("pre-tax 200.00, tax 20.00, post-tax 220.00") != std::string::npos);
+    CHECK(report.find("Total spent (post-tax): 220.00") != std::string::npos);
+
+    std::ostringstream budgets;
+    acq.printBudgets(budgets);
+    CHECK(budgets.str().find("Department: Computer Science") != std::string::npos);
+    CHECK(budgets.str().find("Department: Physics") != std::string::npos);
+
+    // With the single-budget constructor the report looks as it always did
+    Catalog c2;
+    c2.emplace<Book>("B1", "Clean Code", std::vector<std::string>{"A"}, "i", "P", 2020,
+                     Money::of(100));
+    Budget single(Money::of(1000));
+    AcquisitionManager legacy(c2, single);
+    legacy.purchase("B1", 1);
+    std::ostringstream legacyOut;
+    legacy.printReport(legacyOut);
+    CHECK(legacyOut.str().find("[General]") == std::string::npos);
+    CHECK(legacyOut.str().find("By department") == std::string::npos);
+    CHECK(legacyOut.str().find("Total spent (post-tax): 100.00") != std::string::npos);
+}
 
 int main()
 {
@@ -926,6 +980,7 @@ int main()
     testCancelReport();
     testDepartment();
     testDepartmentBudgets();
+    testDepartmentReport();
     std::cout
         << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;

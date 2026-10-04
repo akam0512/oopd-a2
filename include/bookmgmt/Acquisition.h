@@ -44,6 +44,14 @@ namespace bookmgmt
         Department department = Department::general(); // Q9: the department charged
     };
 
+    // Q9:
+    struct DepartmentTotals
+    {
+        Money preTax;
+        Money tax;
+        Money postTax; // preTax + tax
+    };
+
     class AcquisitionManager
     {
     public:
@@ -106,8 +114,12 @@ namespace bookmgmt
         Money totalSpent() const;
         Money totalSpentPreTax() const;
         Money totalTax() const;
+        // Q9
+        DepartmentTotals totalsFor(const Department &department) const;
 
         void printReport(std::ostream &os) const;
+        // Q9: every department's budget, one after the other.
+        void printBudgets(std::ostream &os) const;
 
     private:
         // Cost of a request before and after tax. Quotas and the budget are
