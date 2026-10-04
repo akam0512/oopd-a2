@@ -70,6 +70,42 @@ namespace bookmgmt
         return record(&r, id, quantity, price, true, {});
     }
 
+    const PurchaseRecord &AcquisitionManager::cancel(int orderNo)
+    {
+        const PurchaseRecord *found = nullptr;
+        for (const auto &rec : history_)
+            if (rec.orderNo == orderNo)
+                found = &rec;
+
+        const std::string label = "order " + std::to_string(orderNo);
+        if (!found)
+            throw std::invalid_argument("no such order: " + std::to_string(orderNo));
+        if (found->cancellation)
+            throw std::invalid_argument(label + " is a cancellation and cannot be cancelled");
+        if (!found->approved)
+            throw std::invalid_argument(label + " was rejected and cannot be cancelled");
+        if (isCancelled(orderNo))
+            throw std::invalid_argument(label + " is already cancelled");
+
+        // Copy it: adding the cancellation record below may move the history.
+        const PurchaseRecord original = *found;
+
+        // Do the check that can fail first, so a failed cancel changes nothing.
+        if (catalog_.holdings(original.resourceId) < original.quantity) // may throw NotFoundError
+            throw std::invalid_argument("not enough holdings of " + original.resourceId +
+                                        " to cancel " + label);
+
+        // Refund exactly what was charged (stored post-tax cost), not a new price:
+        // prices and tax rates may have changed since the purchase.
+        budget_.refund(original.category, original.quantity, original.cost, original.resourceId);
+        catalog_.addHoldings(original.resourceId, -original.quantity);
+
+        history_.push_back(PurchaseRecord{
+            nextOrderNo_++, original.resourceId, original.title, original.category, original.quantity, original.cost * -1, false, {}, original.preTaxCost * -1, original.tax * -1, true, original.orderNo});
+        cancelledOrders_.insert(orderNo);
+        return history_.back();
+    }
+
     std::vector<PurchaseRecord> AcquisitionManager::processBatch(
         const std::vector<PurchaseRequest> &reqs)
     {

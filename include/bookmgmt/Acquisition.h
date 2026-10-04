@@ -3,6 +3,7 @@
 // Budget's quotas, updating Catalog holdings and keeping an order history.
 
 #include <iosfwd>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -28,9 +29,11 @@ namespace bookmgmt
         int quantity;
         Money cost; // amount charged to the budget: post-tax (preTaxCost + tax)
         bool approved;
-        std::string reason; // why it was rejected; empty if approved
-        Money preTaxCost;   // Q6: cost before tax
-        Money tax;          // Q6: tax on that cost
+        std::string reason;        // why it was rejected; empty if approved
+        Money preTaxCost;          // Q6: cost before tax
+        Money tax;                 // Q6: tax on that cost
+        bool cancellation = false; // Q8: true for the record that cancels an order
+        int cancelsOrderNo = 0;    // Q8: the order a cancellation record cancels
     };
 
     class AcquisitionManager
@@ -54,6 +57,15 @@ namespace bookmgmt
         // BudgetExceededError or std::invalid_argument. On success the budget
         // and holdings are updated and the record is added to history.
         const PurchaseRecord &purchase(const std::string &id, int quantity);
+
+        // Q8: cancels an approved order. Refunds the budget and the quota usage
+        // (using the amounts stored in the original record), reduces the holdings,
+        // and adds a cancellation record with negative amounts. The original
+        // record stays in the history. Returns the cancellation record.
+        // Throws std::invalid_argument, changing nothing, if the order does not
+        // exist, was rejected, is itself a cancellation, or is already cancelled.
+        const PurchaseRecord &cancel(int orderNo);
+        bool isCancelled(int orderNo) const { return cancelledOrders_.count(orderNo) > 0; }
 
         // Processes requests in order; each is approved or rejected on its own
         // (never throws for a rejected request). Every outcome is recorded.
@@ -87,6 +99,7 @@ namespace bookmgmt
         Budget &budget_;
         TaxPolicy taxPolicy_;
         std::vector<PurchaseRecord> history_;
+        std::set<int> cancelledOrders_; // Q8: numbers of orders that were cancelled
         int nextOrderNo_ = 1;
     };
 

@@ -634,6 +634,113 @@ static void testBudgetRefund()
     r.commit(ResourceCategory::Book, 2, Money::of(100), "B1");
     CHECK(r.spent() == Money::of(100));
 }
+static void testCancel()
+{
+    // Setup: books at 100 each, Book quota of at most 2 titles, 10% print tax
+    Catalog c;
+    for (const char *id : {"B1", "B2", "B3"})
+        c.emplace<Book>(id, "T", std::vector<std::string>{"A"}, "i", "P", 2020, Money::of(100));
+    Budget b(Money::of(10000));
+    b.setQuota(ResourceCategory::Book, {100, Money::of(5000), 2});
+    AcquisitionManager acq(c, b, TaxPolicy(10, 0));
+
+    CHECK(acq.purchase("B1", 2).cost == Money::of(220)); // order #1: 200 + 10%
+    CHECK(acq.purchase("B2", 3).cost == Money::of(330)); // order #2
+    CHECK(b.spent() == Money::of(550));
+    CHECK(!acq.canPurchase("B3", 1)); // title limit reached
+
+    // Cancel order #1
+    const PurchaseRecord cr = acq.cancel(1); // copy: history may grow
+    CHECK(cr.cancellation && cr.cancelsOrderNo == 1 && cr.orderNo == 3);
+    CHECK(!cr.approved);
+    CHECK(cr.resourceId == "B1" && cr.quantity == 2);
+    CHECK(cr.cost == Money::of(-220));
+    CHECK(cr.preTaxCost == Money::of(-200) && cr.tax == Money::of(-20));
+    CHECK(b.spent() == Money::of(330));                   // budget refunded
+    CHECK(b.usageFor(ResourceCategory::Book).units == 3); // quota usage refunded
+    CHECK(b.usageFor(ResourceCategory::Book).spent == Money::of(330));
+    CHECK(c.holdings("B1") == 0 && c.holdings("B2") == 3);   // holdings reduced
+    CHECK(b.usageFor(ResourceCategory::Book).titles() == 1); // B1 no longer counted
+    CHECK(acq.canPurchase("B3", 1));                         // so a new title fits
+
+    // The original record stays in the history, unchanged
+    CHECK(acq.history().size() == 3);
+    CHECK(acq.history()[0].orderNo == 1 && acq.history()[0].approved);
+    CHECK(!acq.history()[0].cancellation && acq.history()[0].cost == Money::of(220));
+    CHECK(acq.history()[2].cancellation);
+    CHECK(acq.isCancelled(1) && !acq.isCancelled(2));
+
+    CHECK(acq.purchase("B3", 1).approved);                     // order #4
+    CHECK(acq.processBatch({{"X9", 1}})[0].approved == false); // order #5: rejected
+
+    // Orders that cannot be cancelled: nothing changes
+    CHECK_THROWS(acq.cancel(1), std::invalid_argument);  // already cancelled
+    CHECK_THROWS(acq.cancel(3), std::invalid_argument);  // a cancellation record
+    CHECK_THROWS(acq.cancel(5), std::invalid_argument);  // a rejected order
+    CHECK_THROWS(acq.cancel(99), std::invalid_argument); // no such order
+    CHECK_THROWS(acq.cancel(0), std::invalid_argument);
+    CHECK(acq.history().size() == 5);
+    CHECK(b.spent() == Money::of(440)); // 330 + 110
+    CHECK(c.holdings("B1") == 0 && c.holdings("B2") == 3 && c.holdings("B3") == 1);
+
+    // The same title bought twice: cancelling one order keeps the title counted
+    Catalog c2;
+    c2.emplace<Book>("B1", "T", std::vector<std::string>{"A"}, "i", "P", 2020, Money::of(100));
+    Budget b2(Money::of(10000));
+    b2.setQuota(ResourceCategory::Book, {100, Money::of(5000), 2});
+    AcquisitionManager acq2(c2, b2);
+    acq2.purchase("B1", 2); // order #1
+    acq2.purchase("B1", 3); // order #2
+    acq2.cancel(1);
+    CHECK(b2.usageFor(ResourceCategory::Book).titles() == 1); // B1 still held
+    CHECK(b2.usageFor(ResourceCategory::Book).units == 3);
+    CHECK(c2.holdings("B1") == 3);
+    acq2.cancel(2);
+    CHECK(b2.usageFor(ResourceCategory::Book).titles() == 0); // now it is gone
+    CHECK(b2.usageFor(ResourceCategory::Book).units == 0);
+    CHECK(b2.spent() == Money{} && c2.holdings("B1") == 0);
+
+    // The refund is the amount stored in the order, even if the tax rate changed
+    Catalog c3;
+    c3.emplace<Book>("B1", "T", std::vector<std::string>{"A"}, "i", "P", 2020, Money::of(100));
+    Budget b3(Money::of(10000));
+    AcquisitionManager acq3(c3, b3, TaxPolicy(10, 0));
+    acq3.purchase("B1", 1); // 110
+    acq3.setTaxPolicy(TaxPolicy(50, 0));
+    acq3.cancel(1);
+    CHECK(b3.spent() == Money{});
+
+    // Cancelled capacity can be used again
+    Catalog c4;
+    c4.emplace<Book>("B1", "T", std::vector<std::string>{"A"}, "i", "P", 2020, Money::of(10));
+    Budget b4(Money::of(1000));
+    b4.setQuota(ResourceCategory::Book, {2, Money::of(1000)});
+    AcquisitionManager acq4(c4, b4);
+    acq4.purchase("B1", 2);
+    CHECK(!acq4.canPurchase("B1", 1)); // unit quota full
+    acq4.cancel(1);
+    CHECK(acq4.canPurchase("B1", 2));
+    CHECK(acq4.purchase("B1", 2).approved);
+
+    // Free orders can be cancelled too
+    Catalog c5;
+    c5.emplace<Thesis>("T1", "T", "U", DegreeLevel::Master, "S", 2024);
+    Budget b5(Money::of(10));
+    AcquisitionManager acq5(c5, b5);
+    acq5.purchase("T1", 2);
+    CHECK(acq5.cancel(1).cost == Money{});
+    CHECK(c5.holdings("T1") == 0 && b5.usageFor(ResourceCategory::Thesis).titles() == 0);
+
+    // If the resource was removed from the catalog, cancel fails and changes nothing
+    Catalog c6;
+    c6.emplace<Book>("B1", "T", std::vector<std::string>{"A"}, "i", "P", 2020, Money::of(10));
+    Budget b6(Money::of(1000));
+    AcquisitionManager acq6(c6, b6);
+    acq6.purchase("B1", 1);
+    c6.remove("B1");
+    CHECK_THROWS(acq6.cancel(1), NotFoundError);
+    CHECK(b6.spent() == Money::of(10) && !acq6.isCancelled(1) && acq6.history().size() == 1);
+}
 
 int main()
 {
@@ -651,6 +758,7 @@ int main()
     testTaxes();
     testTitleLimit();
     testBudgetRefund();
+    testCancel();
     std::cout
         << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;
