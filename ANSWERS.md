@@ -113,3 +113,15 @@ Q1, Q2, Q3, Q4, Q5, Q6, Q7
 - The report can show the department for each purchase and can also show totals for each department. `printBudgets()` shows the budget of every department.
 
 - Taxes continue to use the same tax policy for the whole `AcquisitionManager`; they are not separate for each department.
+
+## Q10 – Year-end rollover
+
+- I made `Budget::rollover()` for creating the budget for the next year. The new budget gets the new allocation plus the given percentage of the money left unused this year. The unused money is taken from `remaining()`, so refunded money is also included.
+
+- I also added `carryForwardAmount()` to calculate only the amount that will be carried forward. The percentage must be between 0 and 100, and the new allocation cannot be negative.
+
+- The quotas are copied to the new budget, but the usage starts from zero. So the unit, spend and title limits are available again for the new year. The current year's budget is not changed.
+
+- If departments are being used, `rolloverBudgets()` rolls over each department's budget separately. It returns the new budgets so they can be given to a new `AcquisitionManager`.
+
+- I did not store the carried-forward amount separately in the new budget because it was not required for this question.

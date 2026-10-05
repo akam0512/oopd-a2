@@ -75,6 +75,19 @@ namespace bookmgmt
         // what was bought.
         void refund(ResourceCategory c, int units, Money cost,
                     const std::string &resourceId = {});
+
+        // Q10: year-end rollover.
+        // The money left unspent (remaining(), refunds included) that would be
+        // carried forward at the given percentage (0 to 100), rounded like all
+        // percentages. Throws std::invalid_argument for a percentage outside 0..100.
+        Money carryForwardAmount(int carryForwardPercent) const;
+        // Next year's budget: its total is `newAllocation` plus the carried-forward
+        // amount. It has the same quotas as this one; usage starts at zero. This
+        // budget is not changed. The one-argument form uses this year's total as
+        // the new allocation. Throws std::invalid_argument for a bad percentage or
+        // a negative allocation.
+        Budget rollover(int carryForwardPercent, Money newAllocation) const;
+        Budget rollover(int carryForwardPercent) const;
         void print(std::ostream &os) const;
 
     private:

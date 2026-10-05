@@ -190,6 +190,26 @@ int main()
     });
     deptAcq.printReport(std::cout);
     deptAcq.printBudgets(std::cout);
+
+    // Q10: year-end rollover. Carry forward 50% of the unspent amount.
+    std::cout << "\n=== Year-end rollover (carry forward 50% of the unspent amount) ===\n";
+    Budget thisYear(Money::of(10000));
+    thisYear.setQuota(ResourceCategory::Book, {20, Money::of(4000), 5});
+    thisYear.commit(ResourceCategory::Book, 6, Money::of(3000), "RB1");
+    std::cout << "This year: total " << thisYear.total() << ", spent " << thisYear.spent()
+              << ", unspent " << thisYear.remaining() << "\n";
+    std::cout << "Carried forward (50% of unspent): " << thisYear.carryForwardAmount(50) << "\n";
+    Budget nextYear = thisYear.rollover(50);
+    std::cout << "Next year (same allocation + carry-forward, same quotas, usage reset):\n";
+    nextYear.print(std::cout);
+
+    std::cout << "\nDepartments' budgets for next year:\n";
+    const std::map<Department, Budget> nextBudgets = deptAcq.rolloverBudgets(50);
+    for (const auto &entry : nextBudgets)
+    {
+        std::cout << "Department: " << entry.first << "\n";
+        entry.second.print(std::cout);
+    }
     // Direct purchase: errors are reported with exceptions
     std::cout << "\n=== Direct purchase that breaks a quota ===\n";
     try

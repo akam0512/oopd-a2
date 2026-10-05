@@ -68,6 +68,10 @@ namespace bookmgmt
         std::vector<Department> departments() const;
         // Throws UnknownDepartmentError.
         const Budget &budgetFor(const Department &department) const;
+        // Q10: next year's budget for every department (see Budget::rollover; each
+        // department's new allocation is its own total this year). The new budgets
+        // are returned to the caller, who registers them with a new manager.
+        std::map<Department, Budget> rolloverBudgets(int carryForwardPercent) const;
 
         const TaxPolicy &taxPolicy() const { return taxPolicy_; }
         void setTaxPolicy(TaxPolicy policy) { taxPolicy_ = policy; }

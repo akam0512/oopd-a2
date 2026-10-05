@@ -187,7 +187,26 @@ namespace bookmgmt
                 u.unitsByTitle.erase(titleIt); // title no longer held
         }
     }
+    Money Budget::carryForwardAmount(int carryForwardPercent) const
+    {
+        if (carryForwardPercent < 0 || carryForwardPercent > 100)
+            throw std::invalid_argument("carry-forward percentage must be between 0 and 100");
+        return remaining().scaledByPercent(carryForwardPercent);
+    }
 
+    Budget Budget::rollover(int carryForwardPercent, Money newAllocation) const
+    {
+        if (newAllocation.isNegative())
+            throw std::invalid_argument("new allocation must not be negative");
+        Budget next(newAllocation + carryForwardAmount(carryForwardPercent));
+        next.quotas_ = quotas_; // same limits; usage starts at zero
+        return next;
+    }
+
+    Budget Budget::rollover(int carryForwardPercent) const
+    {
+        return rollover(carryForwardPercent, total_);
+    }
     void Budget::print(std::ostream &os) const
     {
         os << "Budget: total " << total_ << ", spent " << spent_ << ", remaining "

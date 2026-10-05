@@ -61,6 +61,13 @@ namespace bookmgmt
     {
         return lookupBudget(department);
     }
+    std::map<Department, Budget> AcquisitionManager::rolloverBudgets(int carryForwardPercent) const
+    {
+        std::map<Department, Budget> next;
+        for (const auto &entry : budgets_)
+            next.emplace(entry.first, entry.second->rollover(carryForwardPercent));
+        return next;
+    }
 
     AcquisitionManager::Pricing AcquisitionManager::pricing(const Resource &r,
                                                             int quantity) const

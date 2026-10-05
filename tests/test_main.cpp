@@ -959,6 +959,87 @@ static void testDepartmentReport()
     CHECK(legacyOut.str().find("By department") == std::string::npos);
     CHECK(legacyOut.str().find("Total spent (post-tax): 100.00") != std::string::npos);
 }
+static void testRollover()
+{
+    Budget year1(Money::of(1000));
+    year1.setQuota(ResourceCategory::Book, {10, Money::of(500), 2});
+    year1.setQuota(ResourceCategory::Journal, {3, Money::of(300)});
+    year1.commit(ResourceCategory::Book, 4, Money::of(400), "B1");
+    year1.commit(ResourceCategory::Journal, 1, Money::of(100), "J1");
+    CHECK(year1.remaining() == Money::of(500)); // unspent this year
+
+    // The carried-forward amount is a percentage of the unspent money
+    CHECK(year1.carryForwardAmount(50) == Money::of(250));
+    CHECK(year1.carryForwardAmount(0) == Money{});
+    CHECK(year1.carryForwardAmount(100) == Money::of(500));
+    CHECK_THROWS(year1.carryForwardAmount(-1), std::invalid_argument);
+    CHECK_THROWS(year1.carryForwardAmount(101), std::invalid_argument);
+
+    // Next year: this year's total as the new allocation, plus the carry-forward
+    Budget year2 = year1.rollover(50);
+    CHECK(year2.total() == Money::of(1250)); // 1000 + 250
+    CHECK(year2.spent() == Money{} && year2.remaining() == Money::of(1250));
+    CHECK(year2.quotaFor(ResourceCategory::Book).has_value()); // quotas are kept
+    CHECK(year2.quotaFor(ResourceCategory::Book)->maxUnits == 10);
+    CHECK(year2.quotaFor(ResourceCategory::Book)->maxSpend == Money::of(500));
+    CHECK(year2.quotaFor(ResourceCategory::Book)->maxTitles == 2);
+    CHECK(year2.quotaFor(ResourceCategory::Journal)->maxUnits == 3);
+    CHECK(!year2.quotaFor(ResourceCategory::Thesis).has_value());
+    CHECK(year2.usageFor(ResourceCategory::Book).units == 0); // usage starts again at zero
+    CHECK(year2.usageFor(ResourceCategory::Book).titles() == 0);
+    CHECK(year2.usageFor(ResourceCategory::Journal).spent == Money{});
+    CHECK(year1.spent() == Money::of(500)); // this year is not changed
+    CHECK(year1.usageFor(ResourceCategory::Book).units == 4);
+
+    // A different new allocation, and the percentage extremes
+    CHECK(year1.rollover(50, Money::of(2000)).total() == Money::of(2250));
+    CHECK(year1.rollover(0).total() == Money::of(1000));          // nothing carried forward
+    CHECK(year1.rollover(100).total() == Money::of(1500));        // everything carried forward
+    CHECK(year1.rollover(25, Money{}).total() == Money::of(125)); // only the carry-forward
+    CHECK_THROWS(year1.rollover(101), std::invalid_argument);
+    CHECK_THROWS(year1.rollover(-5, Money::of(10)), std::invalid_argument);
+    CHECK_THROWS(year1.rollover(50, Money::fromMinor(-1)), std::invalid_argument);
+
+    // Next year's budget works like any other, with fresh quotas
+    year2.commit(ResourceCategory::Book, 10, Money::of(500), "B1");
+    CHECK(year2.unitsRemaining(ResourceCategory::Book) == 0);
+    CHECK(year2.remaining() == Money::of(750));
+    CHECK(!year2.check(ResourceCategory::Book, 1, Money::of(1), "B1").empty()); // unit quota full
+
+    // Rounding: 33% of 10.01 is 3.3033, rounded to 3.30
+    Budget odd(Money::fromMinor(1001));
+    CHECK(odd.carryForwardAmount(33) == Money::fromMinor(330));
+
+    // A fully spent budget carries nothing; refunds count as unspent
+    Budget full(Money::of(100));
+    full.commit(ResourceCategory::Book, 1, Money::of(100), "B1");
+    CHECK(full.rollover(50).total() == Money::of(100));
+    full.refund(ResourceCategory::Book, 1, Money::of(100), "B1");
+    CHECK(full.rollover(50).total() == Money::of(150));
+
+    // With departments: every department's budget rolls over on its own
+    Catalog c;
+    c.emplace<Book>("B1", "T", std::vector<std::string>{"A"}, "i", "P", 2020, Money::of(100));
+    Budget csB(Money::of(1000)), physB(Money::of(500));
+    csB.setQuota(ResourceCategory::Book, {10, Money::of(800)});
+    const Department cs("Computer Science"), phys("Physics");
+    AcquisitionManager acq(c);
+    acq.addDepartment(cs, csB);
+    acq.addDepartment(phys, physB);
+    acq.purchase("B1", 3, cs); // CS spends 300, 700 left
+    std::map<Department, Budget> next = acq.rolloverBudgets(50);
+    CHECK(next.size() == 2);
+    CHECK(next.at(cs).total() == Money::of(1350));  // 1000 + 50% of 700
+    CHECK(next.at(phys).total() == Money::of(750)); // 500 + 50% of 500
+    CHECK(next.at(cs).quotaFor(ResourceCategory::Book)->maxUnits == 10);
+    CHECK(csB.spent() == Money::of(300)); // this year's budgets are unchanged
+
+    AcquisitionManager nextYear(c); // a new manager for the new year
+    nextYear.addDepartment(cs, next.at(cs));
+    nextYear.addDepartment(phys, next.at(phys));
+    CHECK(nextYear.purchase("B1", 1, phys).approved);
+    CHECK(next.at(phys).spent() == Money::of(100) && physB.spent() == Money{});
+}
 
 int main()
 {
@@ -981,6 +1062,7 @@ int main()
     testDepartment();
     testDepartmentBudgets();
     testDepartmentReport();
+    testRollover();
     std::cout
         << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;
