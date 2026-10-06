@@ -1120,6 +1120,123 @@ static void testAllOrNothing()
     // An empty batch does nothing
     CHECK(strict.processBatch({}, true).empty());
 }
+static void testVendors()
+{
+    // Without offers, the list price is used
+    Book book("B1", "T", {"A"}, "i", "P", 2020, Money::of(450));
+    CHECK(book.offers().empty() && book.cheapestOffer() == nullptr);
+    CHECK(book.purchasePrice() == Money::of(450));
+
+    // Several vendors: the cheapest one sets the price
+    book.setOffer("BookWorld", Money::of(420));
+    book.setOffer("Readers Hub", Money::of(400));
+    book.setOffer("Campus Store", Money::of(430));
+    CHECK(book.offers().size() == 3);
+    CHECK(book.cheapestOffer()->vendor == "Readers Hub");
+    CHECK(book.purchasePrice() == Money::of(400));
+    CHECK(book.unitPrice() == Money::of(450)); // the list price is unchanged
+    CHECK(book.costFor(2) == Money::of(800));  // 2 x 400
+
+    // Changing a listed vendor's price does not add a second entry
+    book.setOffer("Readers Hub", Money::of(480));
+    CHECK(book.offers().size() == 3);
+    CHECK(book.cheapestOffer()->vendor == "BookWorld");
+    CHECK(book.purchasePrice() == Money::of(420));
+
+    // A tie goes to the vendor added first
+    Book tie("B2", "T", {"A"}, "i", "P", 2020, Money::of(500));
+    tie.setOffer("First", Money::of(100));
+    tie.setOffer("Second", Money::of(100));
+    CHECK(tie.cheapestOffer()->vendor == "First");
+
+    // Bad input is rejected and changes nothing
+    CHECK_THROWS(book.setOffer("", Money::of(10)), std::invalid_argument);
+    CHECK_THROWS(book.setOffer("   ", Money::of(10)), std::invalid_argument);
+    CHECK_THROWS(book.setOffer("Cheap", Money::fromMinor(-1)), std::invalid_argument);
+    CHECK(book.offers().size() == 3);
+
+    // Every kind of resource prices from the cheapest vendor, with its own rules on top
+    Book hard("B3", "T", {"A"}, "i", "P", 2020, Money::of(1000), 1, Binding::Hardcover);
+    hard.setOffer("V", Money::of(500));
+    CHECK(hard.costFor(1) == Money::of(600)); // 500 + 20% hardcover
+    Book bulk("B4", "T", {"A"}, "i", "P", 2020, Money::of(200));
+    bulk.setOffer("V", Money::of(100));
+    CHECK(bulk.costFor(10) == Money::of(900)); // 10 x 100, minus 10% bulk discount
+    Journal journal("J1", "T", "i", "P", 2026, Money::of(500), 12, 2);
+    journal.setOffer("V", Money::of(100));
+    CHECK(journal.costFor(3) == Money::of(600)); // 100 x 3 copies x 2 years
+    Thesis thesis("T1", "T", "U", DegreeLevel::Master, "S", 2024);
+    CHECK(thesis.costFor(2) == Money{}); // free without vendors
+    thesis.setOffer("Binder", Money::of(50));
+    CHECK(thesis.costFor(2) == Money::of(100));
+    ElectronicResource eres("R1", "DB", "P", 2026, Money::of(100), "url",
+                            LicenseModel::AnnualSubscription, Money::of(100));
+    eres.setOffer("V", Money::of(10));
+    CHECK(eres.costFor(60) == Money::of(650)); // 100 fee + 50 x 10 + 10 x 5
+    EBook ebook("E1", "T", {"A"}, "i", "P", 2020, Money::of(100), "url", FileFormat::PDF,
+                false, LicenseModel::AnnualSubscription, Money::of(100));
+    ebook.setOffer("V", Money::of(10));
+    CHECK(ebook.costFor(60) == Money::of(650));
+    AudioBook audio("A1", "T", "P", 2020, Money::of(100), "url",
+                    LicenseModel::AnnualSubscription, Money::of(100), "N", 60);
+    audio.setOffer("V", Money::of(10));
+    CHECK(audio.costFor(60) == Money::of(650));
+
+    // Printing lists the vendors
+    std::ostringstream os;
+    os << book;
+    CHECK(os.str().find("unit price: 450.00") != std::string::npos);
+    CHECK(os.str().find("vendor: BookWorld @ 420.00") != std::string::npos);
+
+    // Purchases are made from the cheapest vendor, and the order says which
+    Catalog c;
+    Resource &b = c.emplace<Book>("B1", "Clean Code", std::vector<std::string>{"A"}, "i", "P",
+                                  2020, Money::of(100));
+    c.emplace<Book>("B2", "No Vendors", std::vector<std::string>{"A"}, "i", "P", 2020,
+                    Money::of(100));
+    b.setOffer("V1", Money::of(90));
+    b.setOffer("V2", Money::of(80));
+    b.setOffer("V3", Money::of(85));
+    Budget budget(Money::of(10000));
+    AcquisitionManager acq(c, budget, TaxPolicy(10, 0));
+    CHECK(acq.quote("B1", 2) == Money::of(160));        // quotes use the cheapest vendor
+    const PurchaseRecord first = acq.purchase("B1", 2); // order #1
+    CHECK(first.vendor == "V2");
+    CHECK(first.preTaxCost == Money::of(160) && first.tax == Money::of(16));
+    CHECK(first.cost == Money::of(176) && budget.spent() == Money::of(176));
+    CHECK(c.holdings("B1") == 2);
+
+    b.setOffer("V2", Money::of(95));                     // V2 raises its price
+    const PurchaseRecord second = acq.purchase("B1", 1); // order #2
+    CHECK(second.vendor == "V3" && second.preTaxCost == Money::of(85));
+    CHECK(acq.history()[0].vendor == "V2"); // the first order keeps its vendor
+
+    CHECK(acq.purchase("B2", 1).vendor.empty()); // no vendors: the list price
+    CHECK(acq.purchase("B2", 1).preTaxCost == Money::of(100));
+    CHECK(acq.processBatch({{"X9", 1}})[0].vendor.empty()); // a rejected order has no vendor
+
+    // Cancelling refunds what was paid and keeps the vendor on the cancellation record
+    b.setOffer("V3", Money::of(10));
+    const PurchaseRecord cr = acq.cancel(1);
+    CHECK(cr.vendor == "V2" && cr.cost == Money::of(-176));
+    CHECK(budget.spent() == Money::fromMinor(31350)); // 489.50 spent, minus the 176.00 refund
+
+    // Quotas use the vendor price: 2 copies cost 160 from V2 but 200 at list price
+    Catalog c2;
+    Resource &b2 = c2.emplace<Book>("B1", "T", std::vector<std::string>{"A"}, "i", "P", 2020,
+                                    Money::of(100));
+    b2.setOffer("V2", Money::of(80));
+    Budget limited(Money::of(10000));
+    limited.setQuota(ResourceCategory::Book, {10, Money::of(170)});
+    AcquisitionManager acq2(c2, limited);
+    CHECK(acq2.purchase("B1", 2).approved);
+
+    // The report shows the vendor
+    std::ostringstream report;
+    acq.printReport(report);
+    CHECK(report.str().find("from V2") != std::string::npos);
+    CHECK(report.str().find("from V3") != std::string::npos);
+}
 
 int main()
 {
@@ -1144,6 +1261,7 @@ int main()
     testDepartmentReport();
     testRollover();
     testAllOrNothing();
+    testVendors();
     std::cout
         << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;

@@ -42,7 +42,7 @@ namespace bookmgmt
     Money Thesis::costFor(int copies) const
     {
         requirePositive(copies);
-        return applyPrintBulkDiscount(unitPrice() * copies, copies);
+        return applyPrintBulkDiscount(purchasePrice() * copies, copies);
     }
 
 } // namespace bookmgmt

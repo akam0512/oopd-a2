@@ -132,10 +132,13 @@ namespace bookmgmt
                                                std::string reason,
                                                const Department &department)
     {
+        // Q12: an approved order is bought from the cheapest vendor, if there are any.
+        const VendorOffer *offer = (approved && r) ? r->cheapestOffer() : nullptr;
         history_.push_back(PurchaseRecord{
             nextOrderNo_++, id, r ? r->title() : std::string("(unknown)"),
             r ? r->category() : ResourceCategory::Book, qty, price.total(), approved,
-            std::move(reason), price.preTax, price.tax, false, 0, department});
+            std::move(reason), price.preTax, price.tax, false, 0, department,
+            offer ? offer->vendor : std::string()});
         return history_.back();
     }
 
@@ -189,7 +192,7 @@ namespace bookmgmt
         catalog_.addHoldings(original.resourceId, -original.quantity);
 
         history_.push_back(PurchaseRecord{
-            nextOrderNo_++, original.resourceId, original.title, original.category, original.quantity, original.cost * -1, false, {}, original.preTaxCost * -1, original.tax * -1, true, original.orderNo, original.department});
+            nextOrderNo_++, original.resourceId, original.title, original.category, original.quantity, original.cost * -1, false, {}, original.preTaxCost * -1, original.tax * -1, true, original.orderNo, original.department, original.vendor});
         cancelledOrders_.insert(orderNo);
         return history_.back();
     }
@@ -331,6 +334,8 @@ namespace bookmgmt
                << rec.resourceId << " x" << std::setw(3) << rec.quantity << " "
                << std::setw(12) << std::right << rec.cost.toString() << std::left << "  "
                << rec.title;
+            if (!rec.vendor.empty())
+                os << "  from " << rec.vendor;
             if (rec.department != Department::general())
                 os << "  [" << rec.department << "]";
             if (rec.cancellation)

@@ -7,7 +7,7 @@
 
 #include <iosfwd>
 #include <string>
-
+#include <vector>
 #include "bookmgmt/Money.h"
 
 namespace bookmgmt
@@ -27,7 +27,12 @@ namespace bookmgmt
     };
 
     const char *categoryName(ResourceCategory c);
-
+    // Q12: one vendor's price for a title.
+    struct VendorOffer
+    {
+        std::string vendor;
+        Money price;
+    };
     class Resource
     {
     public:
@@ -60,6 +65,18 @@ namespace bookmgmt
         // Single-line summary, e.g. "[Book] B001  Clean Code (2008)  @ 450.00".
         std::string summary() const;
 
+        // Q12: the vendors that sell this title, with their prices. The list
+        // price (unitPrice) is only used while there are no offers.
+        // setOffer adds a vendor, or changes its price if it is already listed.
+        // Throws std::invalid_argument for an empty vendor name or a negative price.
+        void setOffer(const std::string &vendor, Money price);
+        const std::vector<VendorOffer> &offers() const { return offers_; }
+        // The cheapest offer (the first one added wins a tie), or nullptr if none.
+        const VendorOffer *cheapestOffer() const;
+        // The price per unit that purchases use: the cheapest vendor's price,
+        // or the list price if there are no offers.
+        Money purchasePrice() const;
+
     protected:
         // Subclasses append their own fields (one "  key: value" line each).
         virtual void printDetails(std::ostream &os) const;
@@ -75,6 +92,7 @@ namespace bookmgmt
         std::string publisher_;
         int year_;
         Money unitPrice_;
+        std::vector<VendorOffer> offers_;
     };
 
     std::ostream &operator<<(std::ostream &os, const Resource &r);

@@ -2,7 +2,7 @@
 
 ## Attempted questions
 
-Q1, Q2, Q3, Q4, Q5, Q6, Q7
+Q1, Q2, Q3, Q4, Q5, Q6, Q7, Q8, Q9, Q10, Q11, Q12
 
 ## Q1 – Journal
 
@@ -139,3 +139,11 @@ Q1, Q2, Q3, Q4, Q5, Q6, Q7
 - I used one small helper function, rejectionReason(), for checking why a request would fail. This keeps the dry run and normal purchase logic consistent.
 
 - I used a simple bool for the all-or-nothing option instead of adding another type, to keep the implementation simple.
+
+## Q12 – Vendors
+
+- Each resource keeps a list of vendor offers (`VendorOffer`: vendor name and price). `setOffer(vendor, price)` adds a vendor or changes its price if it is already listed; an empty vendor name or a negative price throws `std::invalid_argument`. `cheapestOffer()` returns the cheapest offer (the first one added wins a tie).
+- `purchasePrice()` is the price per unit that purchases use: the cheapest vendor's price, or the list price (`unitPrice()`) if there are no offers. Every `costFor` (default, Book, Journal, Thesis, ElectronicResource) now uses `purchasePrice()` instead of `unitPrice()`, so the hardcover surcharge, bulk discounts, seat pricing, taxes, quotas and quotes all use the vendor price automatically. EBook and AudioBook inherit it. `unitPrice()` stays the list price and is what the catalog summary shows, so existing code is unchanged.
+- Choosing by unit price is enough, because every pricing rule grows with the unit price, so the cheapest unit price is also the cheapest total.
+- `PurchaseRecord` has a `vendor` field. An approved order records the cheapest vendor at the time of purchase; rejected orders have no vendor; a cancellation record copies the vendor of the original order. The report shows `from <vendor>`. A vendor's price change later does not affect earlier orders, and a cancellation refunds the amount stored in the original order.
+- Limitation: a vendor only has a unit price. A vendor-specific platform fee for electronic resources is not modelled.

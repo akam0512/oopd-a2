@@ -42,6 +42,8 @@ namespace bookmgmt
         bool cancellation = false;                     // Q8: true for the record that cancels an order
         int cancelsOrderNo = 0;                        // Q8: the order a cancellation record cancels
         Department department = Department::general(); // Q9: the department charged
+
+        std::string vendor = {}; // Q12: the vendor bought from; empty if rejected or no vendors
     };
 
     // Q9: what one department has spent, net of cancellations.

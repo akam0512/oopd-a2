@@ -37,8 +37,8 @@ namespace bookmgmt
         requirePositive(seats);
         const int fullSeats = std::min(seats, kFullPriceSeats);
         const int extraSeats = seats - fullSeats;
-        const Money seatCost = unitPrice() * fullSeats +
-                               (unitPrice() * extraSeats).scaledByPercent(kExtraSeatPercent);
+        const Money seatCost = purchasePrice() * fullSeats +
+                               (purchasePrice() * extraSeats).scaledByPercent(kExtraSeatPercent);
         return platformFee_ + seatCost;
     }
 

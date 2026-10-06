@@ -51,7 +51,37 @@ namespace bookmgmt
             throw std::invalid_argument("price must not be negative");
         unitPrice_ = price;
     }
+    void Resource::setOffer(const std::string &vendor, Money price)
+    {
+        if (vendor.find_first_not_of(' ') == std::string::npos)
+            throw std::invalid_argument("vendor name must not be empty");
+        if (price.isNegative())
+            throw std::invalid_argument("vendor price must not be negative");
+        for (VendorOffer &offer : offers_)
+        {
+            if (offer.vendor == vendor)
+            {
+                offer.price = price; // already listed: change its price
+                return;
+            }
+        }
+        offers_.push_back({vendor, price});
+    }
 
+    const VendorOffer *Resource::cheapestOffer() const
+    {
+        const VendorOffer *best = nullptr;
+        for (const VendorOffer &offer : offers_)
+            if (!best || offer.price < best->price)
+                best = &offer;
+        return best;
+    }
+
+    Money Resource::purchasePrice() const
+    {
+        const VendorOffer *best = cheapestOffer();
+        return best ? best->price : unitPrice_;
+    }
     void Resource::requirePositive(int quantity)
     {
         if (quantity <= 0)
@@ -71,7 +101,7 @@ namespace bookmgmt
     Money Resource::costFor(int quantity) const
     {
         requirePositive(quantity);
-        return unitPrice_ * quantity;
+        return purchasePrice() * quantity;
     }
 
     void Resource::print(std::ostream &os) const
@@ -81,6 +111,8 @@ namespace bookmgmt
            << "  publisher: " << publisher_ << "\n"
            << "  year: " << year_ << "\n"
            << "  unit price: " << unitPrice_ << "\n";
+        for (const VendorOffer &offer : offers_)
+            os << "  vendor: " << offer.vendor << " @ " << offer.price << "\n";
         printDetails(os);
     }
 

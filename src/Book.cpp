@@ -39,7 +39,7 @@ namespace bookmgmt
     Money Book::costFor(int copies) const
     {
         requirePositive(copies);
-        Money perCopy = unitPrice();
+        Money perCopy = purchasePrice();
         if (binding_ == Binding::Hardcover)
             perCopy = perCopy.scaledByPercent(100 + kHardcoverSurchargePercent);
         return applyPrintBulkDiscount(perCopy * copies, copies);

@@ -230,6 +230,34 @@ int main()
     std::cout << "\nAll-or-nothing batch: nothing is bought\n";
     strictAcq.processBatch(batch, true);
     strictAcq.printReport(std::cout);
+    // Q12: vendors. The same title is sold by several vendors; every purchase is
+    // made from the cheapest one, and the order records which vendor was used.
+    std::cout << "\n=== Vendors ===\n";
+    Catalog vendorCatalog;
+    Resource &vbook = vendorCatalog.emplace<Book>("VB1", "Clean Code",
+                                                  std::vector<std::string>{"Robert C. Martin"},
+                                                  "978-0132350884", "Prentice Hall", 2008,
+                                                  Money::of(450));
+    vbook.setOffer("BookWorld", Money::of(440));
+    vbook.setOffer("Readers Hub", Money::of(400));
+    vbook.setOffer("Campus Store", Money::of(420));
+    Resource &vdb = vendorCatalog.emplace<ElectronicResource>(
+        "VR1", "IEEE Xplore Digital Library", "IEEE", 2026, Money::of(150),
+        "https://ieeexplore.example", LicenseModel::AnnualSubscription, Money::of(2000));
+    vdb.setOffer("IEEE direct", Money::of(150));
+    vdb.setOffer("Reseller X", Money::of(130));
+    std::cout << vbook << "\n";
+    Budget vendorBudget(Money::of(20000));
+    AcquisitionManager vendorAcq(vendorCatalog, vendorBudget);
+    vendorAcq.processBatch({
+        {"VB1", 4},  // 4 x 400 = 1600 from Readers Hub
+        {"VR1", 20}, // 2000 + 20 x 130 = 4600 from Reseller X
+    });
+    vbook.setOffer("Readers Hub", Money::of(460)); // Readers Hub raises its price
+    vendorAcq.processBatch({
+        {"VB1", 2}, // 2 x 420 = 840 from Campus Store, now the cheapest
+    });
+    vendorAcq.printReport(std::cout);
     // Direct purchase: errors are reported with exceptions
     std::cout << "\n=== Direct purchase that breaks a quota ===\n";
     try
