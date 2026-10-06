@@ -125,3 +125,17 @@ Q1, Q2, Q3, Q4, Q5, Q6, Q7
 - If departments are being used, `rolloverBudgets()` rolls over each department's budget separately. It returns the new budgets so they can be given to a new `AcquisitionManager`.
 
 - I did not store the carried-forward amount separately in the new budget because it was not required for this question.
+
+## Q11 – All-or-nothing batches
+
+- I added an optional allOrNothing flag to processBatch(). If it is not given, the old behaviour stays the same.
+
+- In all-or-nothing mode, I first check the requests on copies of the budgets. This is important because one request can affect the next request. For example, two requests of 3 units each cannot both fit in a quota of 5 units.
+
+- If all requests pass the check, I buy all of them normally. If even one request fails, nothing is actually bought. All requests are recorded as rejected, with the failed request showing its actual reason and the others showing that they were not bought because of the failed request.
+
+- The dry run uses the same checks as a normal purchase, so quotas, title limits, taxes, department budgets and invalid resources or departments are handled in the same way.
+
+- I used one small helper function, rejectionReason(), for checking why a request would fail. This keeps the dry run and normal purchase logic consistent.
+
+- I used a simple bool for the all-or-nothing option instead of adding another type, to keep the implementation simple.

@@ -210,6 +210,26 @@ int main()
         std::cout << "Department: " << entry.first << "\n";
         entry.second.print(std::cout);
     }
+    // Q11: all-or-nothing batches. Each request fits on its own (3 <= 5 units),
+    // but together they do not.
+    std::cout << "\n=== All-or-nothing batch (Book quota: 5 units) ===\n";
+    Catalog batchCatalog;
+    for (const char *id : {"AN1", "AN2"})
+        batchCatalog.emplace<Book>(id, std::string("Book ") + id,
+                                   std::vector<std::string>{"A. Author"}, "978-0000000000",
+                                   "Publisher", 2020, Money::of(100));
+    Budget normalBudget(Money::of(1000)), strictBudget(Money::of(1000));
+    normalBudget.setQuota(ResourceCategory::Book, {5, Money::of(1000)});
+    strictBudget.setQuota(ResourceCategory::Book, {5, Money::of(1000)});
+    AcquisitionManager normalAcq(batchCatalog, normalBudget);
+    AcquisitionManager strictAcq(batchCatalog, strictBudget);
+    const std::vector<PurchaseRequest> batch = {{"AN1", 3}, {"AN2", 3}};
+    std::cout << "Normal batch: the first request is bought, the second is rejected\n";
+    normalAcq.processBatch(batch);
+    normalAcq.printReport(std::cout);
+    std::cout << "\nAll-or-nothing batch: nothing is bought\n";
+    strictAcq.processBatch(batch, true);
+    strictAcq.printReport(std::cout);
     // Direct purchase: errors are reported with exceptions
     std::cout << "\n=== Direct purchase that breaks a quota ===\n";
     try

@@ -1040,6 +1040,86 @@ static void testRollover()
     CHECK(nextYear.purchase("B1", 1, phys).approved);
     CHECK(next.at(phys).spent() == Money::of(100) && physB.spent() == Money{});
 }
+static void testAllOrNothing()
+{
+    // Two books at 100 each; the Book quota allows 5 units
+    auto makeCatalog = [](Catalog &c)
+    {
+        for (const char *id : {"B1", "B2"})
+            c.emplace<Book>(id, "T", std::vector<std::string>{"A"}, "i", "P", 2020, Money::of(100));
+    };
+
+    // Default (not all-or-nothing): each request is decided on its own, as before
+    Catalog c1;
+    makeCatalog(c1);
+    Budget b1(Money::of(1000));
+    b1.setQuota(ResourceCategory::Book, {5, Money::of(1000)});
+    AcquisitionManager normal(c1, b1);
+    const auto r1 = normal.processBatch({{"B1", 3}, {"B2", 3}, {"B1", 1}});
+    CHECK(r1[0].approved && !r1[1].approved && r1[2].approved);
+    CHECK(b1.spent() == Money::of(400));
+
+    // All-or-nothing, every request fits: all are bought
+    Catalog c2;
+    makeCatalog(c2);
+    Budget b2(Money::of(1000));
+    b2.setQuota(ResourceCategory::Book, {5, Money::of(1000)});
+    AcquisitionManager strict(c2, b2);
+    const auto r2 = strict.processBatch({{"B1", 2}, {"B2", 2}}, true);
+    CHECK(r2.size() == 2 && r2[0].approved && r2[1].approved);
+    CHECK(b2.spent() == Money::of(400) && c2.holdings("B1") == 2 && c2.holdings("B2") == 2);
+
+    // Each request fits alone (3 <= 5 units) but not together: nothing is bought
+    Catalog c3;
+    makeCatalog(c3);
+    Budget b3(Money::of(1000));
+    b3.setQuota(ResourceCategory::Book, {5, Money::of(1000)});
+    AcquisitionManager strict3(c3, b3);
+    const auto r3 = strict3.processBatch({{"B1", 3}, {"B2", 3}}, true);
+    CHECK(r3.size() == 2 && !r3[0].approved && !r3[1].approved);
+    CHECK(r3[0].reason.find("request #2") != std::string::npos); // says which request failed
+    CHECK(r3[1].reason.find("unit quota") != std::string::npos); // and why
+    CHECK(b3.spent() == Money{} && b3.usageFor(ResourceCategory::Book).units == 0);
+    CHECK(c3.holdings("B1") == 0 && c3.holdings("B2") == 0);
+    CHECK(strict3.history().size() == 2); // the rejections are recorded
+    CHECK(strict3.totalSpent() == Money{});
+    CHECK(strict3.purchase("B1", 5).approved); // the budget was left untouched
+
+    // An unknown resource or a bad quantity rejects the whole batch too
+    const auto r4 = strict.processBatch({{"B1", 1}, {"X9", 1}}, true); // 1 unit is left
+    CHECK(!r4[0].approved && !r4[1].approved);
+    CHECK(r4[0].reason.find("request #2") != std::string::npos);
+    CHECK(r4[1].reason == "resource not found: X9");
+    CHECK(c2.holdings("B1") == 2); // the first request was not bought
+    const auto r5 = strict3.processBatch({{"B2", 0}}, true);
+    CHECK(!r5[0].approved && r5[0].reason == "quantity must be positive");
+
+    // The title limit is part of the dry run as well
+    Catalog c4;
+    for (const char *id : {"B1", "B2", "B3"})
+        c4.emplace<Book>(id, "T", std::vector<std::string>{"A"}, "i", "P", 2020, Money::of(10));
+    Budget b4(Money::of(1000));
+    b4.setQuota(ResourceCategory::Book, {50, Money::of(500), 2});
+    AcquisitionManager strict4(c4, b4);
+    strict4.processBatch({{"B1", 1}, {"B2", 1}, {"B3", 1}}, true); // three titles, limit two
+    CHECK(b4.usageFor(ResourceCategory::Book).titles() == 0 && b4.spent() == Money{});
+
+    // Departments: one department's failure stops the other's purchase too
+    Catalog c5;
+    makeCatalog(c5);
+    Budget csB(Money::of(1000)), physB(Money::of(150));
+    const Department cs("Computer Science"), phys("Physics");
+    AcquisitionManager dept(c5);
+    dept.addDepartment(cs, csB);
+    dept.addDepartment(phys, physB);
+    dept.processBatch({{"B1", 2, cs}, {"B2", 2, phys}}, true); // Physics can only afford 1
+    CHECK(csB.spent() == Money{} && physB.spent() == Money{} && c5.holdings("B1") == 0);
+    const auto r6 = dept.processBatch({{"B1", 2, cs}, {"B2", 1, phys}}, true);
+    CHECK(r6[0].approved && r6[1].approved && csB.spent() == Money::of(200));
+
+    // An empty batch does nothing
+    CHECK(strict.processBatch({}, true).empty());
+}
 
 int main()
 {
@@ -1063,6 +1143,7 @@ int main()
     testDepartmentBudgets();
     testDepartmentReport();
     testRollover();
+    testAllOrNothing();
     std::cout
         << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;

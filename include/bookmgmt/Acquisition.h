@@ -44,12 +44,12 @@ namespace bookmgmt
         Department department = Department::general(); // Q9: the department charged
     };
 
-    // Q9:
+    // Q9: what one department has spent, net of cancellations.
     struct DepartmentTotals
     {
         Money preTax;
         Money tax;
-        Money postTax; // preTax + tax
+        Money postTax; // preTax + tax: what the department's budget was charged
     };
 
     class AcquisitionManager
@@ -108,8 +108,12 @@ namespace bookmgmt
 
         // Processes requests in order; each is approved or rejected on its own
         // (never throws for a rejected request). Every outcome is recorded.
-        // EXTENSION POINT: priority ordering, all-or-nothing batches, ...
-        std::vector<PurchaseRecord> processBatch(const std::vector<PurchaseRequest> &reqs);
+        // Q11: with allOrNothing = true, if any request would be rejected (taking
+        // the earlier requests of the batch into account), nothing is bought and
+        // every request is recorded as rejected.
+        // EXTENSION POINT: priority ordering, ...
+        std::vector<PurchaseRecord> processBatch(const std::vector<PurchaseRequest> &reqs,
+                                                 bool allOrNothing = false);
 
         const std::vector<PurchaseRecord> &history() const { return history_; }
         // Totals over approved orders, minus cancelled ones (cancellation records
@@ -118,7 +122,7 @@ namespace bookmgmt
         Money totalSpent() const;
         Money totalSpentPreTax() const;
         Money totalTax() const;
-        // Q9
+        // Q9: the same totals for one department. Throws UnknownDepartmentError.
         DepartmentTotals totalsFor(const Department &department) const;
 
         void printReport(std::ostream &os) const;
@@ -135,6 +139,11 @@ namespace bookmgmt
             Money total() const { return preTax + tax; }
         };
         Pricing pricing(const Resource &r, int quantity) const;
+
+        // Q11: why `req` would be rejected by `budget` (empty string if it would
+        // be approved). Sets `price` once the resource and quantity are known.
+        std::string rejectionReason(const PurchaseRequest &req, const Department &department,
+                                    const Budget *budget, Pricing &price) const;
 
         // The department's budget, or nullptr / UnknownDepartmentError if none.
         Budget *findBudget(const Department &department) const;

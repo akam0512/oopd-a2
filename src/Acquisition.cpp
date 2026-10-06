@@ -14,6 +14,12 @@ namespace bookmgmt
         // Approved orders and cancellations change what was spent (a cancellation
         // counts as negative amounts); rejected orders do not.
         bool affectsTotals(const PurchaseRecord &rec) { return rec.approved || rec.cancellation; }
+
+        // The department a request is charged to: the one it names, or General.
+        Department departmentOf(const PurchaseRequest &req)
+        {
+            return req.department ? *req.department : Department::general();
+        }
     } // namespace
 
     AcquisitionManager::AcquisitionManager(Catalog &catalog, Budget &budget, TaxPolicy taxPolicy)
@@ -61,6 +67,7 @@ namespace bookmgmt
     {
         return lookupBudget(department);
     }
+
     std::map<Department, Budget> AcquisitionManager::rolloverBudgets(int carryForwardPercent) const
     {
         std::map<Department, Budget> next;
@@ -187,45 +194,84 @@ namespace bookmgmt
         return history_.back();
     }
 
+    std::string AcquisitionManager::rejectionReason(const PurchaseRequest &req,
+                                                    const Department &department,
+                                                    const Budget *budget, Pricing &price) const
+    {
+        const Resource *r = catalog_.find(req.resourceId);
+        if (!r)
+            return "resource not found: " + req.resourceId;
+        if (!budget)
+            return "unknown department: " + department.name();
+        if (req.quantity <= 0)
+            return "quantity must be positive";
+        price = pricing(*r, req.quantity);
+        return budget->check(r->category(), req.quantity, price.total(), req.resourceId);
+    }
+
     std::vector<PurchaseRecord> AcquisitionManager::processBatch(
-        const std::vector<PurchaseRequest> &reqs)
+        const std::vector<PurchaseRequest> &reqs, bool allOrNothing)
     {
         std::vector<PurchaseRecord> results;
         results.reserve(reqs.size());
+
+        if (allOrNothing)
+        {
+            // Dry run on copies of the budgets, so nothing real changes. Each request
+            // is checked and "bought" on the copies, so it sees what the requests
+            // before it have already used up.
+            std::map<Department, Budget> trial;
+            for (const auto &entry : budgets_)
+                trial.emplace(entry.first, *entry.second);
+
+            for (std::size_t i = 0; i < reqs.size(); ++i)
+            {
+                const Department department = departmentOf(reqs[i]);
+                auto it = trial.find(department);
+                Budget *budget = (it == trial.end()) ? nullptr : &it->second;
+                Pricing price{};
+                const std::string why = rejectionReason(reqs[i], department, budget, price);
+
+                if (why.empty())
+                {
+                    const Resource &r = catalog_.get(reqs[i].resourceId);
+                    budget->commit(r.category(), reqs[i].quantity, price.total(), reqs[i].resourceId);
+                    continue;
+                }
+
+                // Request i would be rejected, so nothing is bought: record every
+                // request as rejected.
+                for (std::size_t j = 0; j < reqs.size(); ++j)
+                {
+                    const Resource *r = catalog_.find(reqs[j].resourceId);
+                    Pricing p{};
+                    if (r && reqs[j].quantity > 0)
+                        p = pricing(*r, reqs[j].quantity);
+                    const std::string reason =
+                        (j == i) ? why
+                                 : "not bought: request #" + std::to_string(i + 1) + " (" +
+                                       reqs[i].resourceId + ") was rejected";
+                    results.push_back(record(r, reqs[j].resourceId, reqs[j].quantity, p, false,
+                                             reason, departmentOf(reqs[j])));
+                }
+                return results;
+            }
+            // Every request passed the dry run, so the real run below buys them all.
+        }
+
         for (const auto &req : reqs)
         {
-            const Department department =
-                req.department ? *req.department : Department::general();
-            const Resource *r = catalog_.find(req.resourceId);
-            const Budget *budget = findBudget(department);
+            const Department department = departmentOf(req);
             Pricing price{};
-            std::string why;
-            if (!r)
-            {
-                why = "resource not found: " + req.resourceId;
-            }
-            else if (!budget)
-            {
-                why = "unknown department: " + department.name();
-            }
-            else if (req.quantity <= 0)
-            {
-                why = "quantity must be positive";
-            }
-            else
-            {
-                price = pricing(*r, req.quantity);
-                why = budget->check(r->category(), req.quantity, price.total(), req.resourceId);
-            }
-
+            const std::string why = rejectionReason(req, department, findBudget(department), price);
             if (why.empty())
             {
                 results.push_back(purchase(req.resourceId, req.quantity, department));
             }
             else
             {
-                results.push_back(
-                    record(r, req.resourceId, req.quantity, price, false, why, department));
+                results.push_back(record(catalog_.find(req.resourceId), req.resourceId,
+                                         req.quantity, price, false, why, department));
             }
         }
         return results;
