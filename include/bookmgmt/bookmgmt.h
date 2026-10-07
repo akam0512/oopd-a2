@@ -15,3 +15,4 @@
 #include "bookmgmt/Resource.h"
 #include "bookmgmt/Tax.h"
 #include "bookmgmt/Department.h"
+#include "bookmgmt/Lending.h"

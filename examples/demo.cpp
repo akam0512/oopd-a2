@@ -2,6 +2,7 @@
 // and runs a batch of purchase requests through the acquisition manager.
 
 #include <iostream>
+#include <functional>
 
 #include "bookmgmt/bookmgmt.h"
 
@@ -273,6 +274,54 @@ int main()
     show("ISSN 0028-0836", catalog.searchIsbnIssn("0028-0836"));
     show("Published 2008 to 2014", catalog.searchYears(2008, 2014));
     show("Author contains \"nobody\"", catalog.searchAuthor("nobody"));
+    // Q14: lending. Print copies are borrowed and given back; electronic resources
+    // are used through sessions. Both are limited by what the catalog holds.
+    std::cout << "\n=== Lending ===\n";
+    LendingDesk desk(catalog);
+    auto attempt = [](const std::string &what, const std::function<void()> &action)
+    {
+        try
+        {
+            action();
+            std::cout << what << ": ok\n";
+        }
+        catch (const std::exception &e)
+        {
+            std::cout << what << ": " << e.what() << "\n";
+        }
+    };
+    std::cout << "J001 has " << catalog.holdings("J001") << " copies, AB01 has "
+              << catalog.holdings("AB01") << " seats\n";
+    attempt("ann borrows J001", [&]
+            { desk.borrow("ann", "J001"); });
+    attempt("bo borrows J001", [&]
+            { desk.borrow("bo", "J001"); });
+    attempt("cy borrows J001", [&]
+            { desk.borrow("cy", "J001"); });
+    attempt("ann gives back J001", [&]
+            { desk.giveBack("ann", "J001"); });
+    attempt("cy borrows J001", [&]
+            { desk.borrow("cy", "J001"); });
+    attempt("ann opens a session on AB01", [&]
+            { desk.openSession("ann", "AB01"); });
+    attempt("bo opens a session on AB01", [&]
+            { desk.openSession("bo", "AB01"); });
+    attempt("cy opens a session on AB01", [&]
+            { desk.openSession("cy", "AB01"); });
+    attempt("dee opens a session on AB01", [&]
+            { desk.openSession("dee", "AB01"); });
+    attempt("bo closes his session on AB01", [&]
+            { desk.closeSession("bo", "AB01"); });
+    attempt("dee opens a session on AB01", [&]
+            { desk.openSession("dee", "AB01"); });
+    attempt("ann borrows AB01", [&]
+            { desk.borrow("ann", "AB01"); });
+    attempt("bo gives back J001", [&]
+            { desk.giveBack("bo", "J001"); });
+    std::cout << "J001: " << desk.inUse("J001") << " on loan, " << desk.available("J001")
+              << " available\n";
+    std::cout << "AB01: " << desk.inUse("AB01") << " sessions, " << desk.available("AB01")
+              << " seats free\n";
     // Direct purchase: errors are reported with exceptions
     std::cout << "\n=== Direct purchase that breaks a quota ===\n";
     try

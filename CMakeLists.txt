@@ -19,6 +19,7 @@ add_library(bookmgmt
     src/Catalog.cpp
     src/Acquisition.cpp
     src/Department.cpp
+    src/Lending.cpp
 )
 target_include_directories(bookmgmt PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 

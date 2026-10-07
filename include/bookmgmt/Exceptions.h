@@ -48,5 +48,11 @@ namespace bookmgmt
         explicit UnknownDepartmentError(const std::string &name)
             : LibraryError("unknown department: " + name) {}
     };
+    // Q14: thrown when every copy (or seat) of a resource is already in use.
+    class NotAvailableError : public LibraryError
+    {
+    public:
+        using LibraryError::LibraryError;
+    };
 
 } // namespace bookmgmt

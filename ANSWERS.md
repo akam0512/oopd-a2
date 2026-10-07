@@ -156,3 +156,15 @@ Q1, Q2, Q3, Q4, Q5, Q6, Q7, Q8, Q9, Q10, Q11, Q12
 - searchYears(from, to) searches for resources published between the given years, including both from and to. If from is greater than to, it throws std::invalid_argument.
 - Empty author text or an empty ISBN/ISSN search throws std::invalid_argument.
 - The search results are returned in ID order, the same way as the existing searchTitle() function.
+
+## Q14 – Lending
+
+- I added a new class, LendingDesk, which uses the catalog holdings. For print items it keeps track of copies, and for electronic items it keeps track of licensed seats. It stores what is currently being used by keeping the patron and resource id. It does not change the catalog itself.
+
+- For print items, I used borrow and giveBack, while for electronic items I used openSession and closeSession. If the wrong function is used for a resource, std::invalid_argument is thrown. Journals and theses are treated as print items, while e-books and audiobooks are electronic.
+
+- The number of people who can borrow or open a session is limited by the available holdings. available(id) gives the holdings minus the copies or seats currently in use, and it never becomes negative. If nothing is available, NotAvailableError is thrown and the failed operation does not change anything. Invalid patron names, returning something the patron does not have, or using the wrong type of operation gives std::invalid_argument, while an unknown resource id gives NotFoundError.
+
+- A patron is just stored as a string. There is no per-patron limit given in the assignment, so the same patron can have multiple copies of the same item. Each giveBack returns one copy.
+
+- One limitation is that cancelling an order from Q8 does not check whether the copies or seats are currently being used. If something is cancelled while in use, available() does not go below 0, and the existing loan/session can still be returned or closed.

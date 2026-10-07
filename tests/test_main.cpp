@@ -1299,6 +1299,118 @@ static void testSearches()
     CHECK(empty.searchAuthor("x").empty() && empty.searchIsbnIssn("1").empty());
     CHECK(empty.searchYears(2000, 2030).empty());
 }
+static void testLending()
+{
+    Catalog c;
+    c.emplace<Book>("B1", "T", std::vector<std::string>{"A"}, "i", "P", 2020, Money::of(10));
+    c.emplace<Journal>("J1", "Nature", "0028-0836", "P", 2026, Money::of(10), 12);
+    c.emplace<EBook>("E1", "T", std::vector<std::string>{"A"}, "i", "P", 2020, Money::of(10),
+                     "url", FileFormat::PDF, false);
+    c.emplace<ElectronicResource>("R1", "DB", "P", 2026, Money::of(10), "url");
+    c.emplace<Book>("B2", "None bought", std::vector<std::string>{"A"}, "i", "P", 2020,
+                    Money::of(10));
+    c.addHoldings("B1", 2); // 2 copies
+    c.addHoldings("J1", 1); // 1 copy
+    c.addHoldings("E1", 1); // 1 seat
+    c.addHoldings("R1", 2); // 2 seats
+    LendingDesk desk(c);
+
+    // Print copies are limited by the copies held
+    CHECK(desk.available("B1") == 2 && desk.inUse("B1") == 0);
+    desk.borrow("alice", "B1");
+    CHECK(desk.inUse("B1") == 1 && desk.available("B1") == 1);
+    desk.borrow("bob", "B1");
+    CHECK(desk.available("B1") == 0);
+    CHECK_THROWS(desk.borrow("carol", "B1"), NotAvailableError); // both copies are out
+    CHECK(desk.inUse("B1") == 2);                                // a failed borrow changes nothing
+    CHECK(desk.loansOf("carol").empty());
+    desk.giveBack("alice", "B1");
+    CHECK(desk.available("B1") == 1);
+    desk.borrow("carol", "B1"); // the returned copy can be borrowed
+    CHECK(desk.available("B1") == 0);
+    CHECK(desk.loansOf("bob").size() == 1 && desk.loansOf("bob")[0] == "B1");
+    CHECK(desk.loansOf("alice").empty());
+
+    CHECK_THROWS(desk.borrow("alice", "B2"), NotAvailableError); // none held at all
+
+    // Giving back something that was not borrowed
+    CHECK_THROWS(desk.giveBack("alice", "B1"), std::invalid_argument); // alice returned hers
+    CHECK_THROWS(desk.giveBack("dave", "B1"), std::invalid_argument);  // dave never borrowed
+    CHECK(desk.inUse("B1") == 2);
+
+    // The same patron may hold more than one copy; each return gives back one
+    c.addHoldings("B1", 1);
+    desk.giveBack("bob", "B1");
+    desk.borrow("erin", "B1");
+    desk.borrow("erin", "B1");
+    CHECK(desk.loansOf("erin").size() == 2);
+    desk.giveBack("erin", "B1");
+    CHECK(desk.loansOf("erin").size() == 1);
+    desk.giveBack("erin", "B1");
+    CHECK_THROWS(desk.giveBack("erin", "B1"), std::invalid_argument);
+    CHECK(desk.inUse("B1") == 1); // carol still has hers
+
+    // A journal is a print item too
+    desk.borrow("alice", "J1");
+    CHECK_THROWS(desk.borrow("bob", "J1"), NotAvailableError);
+
+    // Electronic resources: sessions, limited by the seats licensed
+    desk.openSession("alice", "E1");
+    CHECK(desk.inUse("E1") == 1 && desk.available("E1") == 0);
+    CHECK_THROWS(desk.openSession("bob", "E1"), NotAvailableError);
+    desk.closeSession("alice", "E1");
+    desk.openSession("bob", "E1"); // the seat is free again
+    CHECK(desk.loansOf("bob").size() == 1 && desk.loansOf("bob")[0] == "E1");
+    desk.openSession("alice", "R1");
+    desk.openSession("bob", "R1");
+    CHECK(desk.available("R1") == 0);
+    CHECK_THROWS(desk.openSession("carol", "R1"), NotAvailableError);
+    CHECK_THROWS(desk.closeSession("carol", "R1"), std::invalid_argument);
+    CHECK_THROWS(desk.closeSession("alice", "E1"), std::invalid_argument); // alice closed hers
+    desk.closeSession("alice", "R1");
+    CHECK(desk.available("R1") == 1);
+
+    // The wrong kind of call for the resource
+    CHECK_THROWS(desk.borrow("alice", "E1"), std::invalid_argument);
+    CHECK_THROWS(desk.borrow("alice", "R1"), std::invalid_argument);
+    CHECK_THROWS(desk.giveBack("alice", "R1"), std::invalid_argument);
+    CHECK_THROWS(desk.openSession("alice", "B1"), std::invalid_argument);
+    CHECK_THROWS(desk.closeSession("carol", "B1"), std::invalid_argument);
+
+    // Unknown ids and empty patron names
+    CHECK_THROWS(desk.borrow("alice", "X9"), NotFoundError);
+    CHECK_THROWS(desk.openSession("alice", "X9"), NotFoundError);
+    CHECK_THROWS(desk.giveBack("alice", "X9"), NotFoundError);
+    CHECK_THROWS(desk.available("X9"), NotFoundError);
+    CHECK_THROWS(desk.inUse("X9"), NotFoundError);
+    CHECK_THROWS(desk.borrow("", "B1"), std::invalid_argument);
+    CHECK_THROWS(desk.openSession("  ", "R1"), std::invalid_argument);
+
+    // Purchases and cancellations change what can be lent
+    Catalog c2;
+    c2.emplace<Book>("B1", "T", std::vector<std::string>{"A"}, "i", "P", 2020, Money::of(10));
+    c2.emplace<ElectronicResource>("R1", "DB", "P", 2026, Money::of(10), "url");
+    Budget budget(Money::of(10000));
+    AcquisitionManager acq(c2, budget);
+    LendingDesk desk2(c2);
+    CHECK_THROWS(desk2.borrow("alice", "B1"), NotAvailableError); // nothing bought yet
+    acq.purchase("B1", 2);                                        // order #1
+    acq.purchase("R1", 3);                                        // order #2
+    CHECK(desk2.available("B1") == 2 && desk2.available("R1") == 3);
+    desk2.borrow("alice", "B1");
+    desk2.borrow("bob", "B1");
+    desk2.openSession("alice", "R1");
+    acq.cancel(2); // the seats are cancelled
+    CHECK(desk2.available("R1") == 0);
+    CHECK_THROWS(desk2.openSession("bob", "R1"), NotAvailableError);
+    desk2.closeSession("alice", "R1"); // an open session can still be closed
+    // Copies cancelled while on loan: available() never goes below zero
+    acq.cancel(1);
+    CHECK(desk2.inUse("B1") == 2 && desk2.available("B1") == 0);
+    desk2.giveBack("alice", "B1");
+    desk2.giveBack("bob", "B1");
+    CHECK(desk2.inUse("B1") == 0);
+}
 
 int main()
 {
@@ -1325,6 +1437,7 @@ int main()
     testAllOrNothing();
     testVendors();
     testSearches();
+    testLending();
     std::cout
         << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;
