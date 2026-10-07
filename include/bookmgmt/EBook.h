@@ -41,6 +41,8 @@ namespace bookmgmt
         bool drmProtected() const { return drmProtected_; }
 
         ResourceCategory category() const override { return ResourceCategory::EBook; }
+        std::vector<std::string> authorNames() const override { return authors_; }
+        std::string standardNumber() const override { return isbn_; }
 
     protected:
         void printDetails(std::ostream &os) const override;

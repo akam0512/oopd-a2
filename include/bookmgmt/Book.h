@@ -29,6 +29,8 @@ namespace bookmgmt
         static constexpr int kHardcoverSurchargePercent = 20;
 
         ResourceCategory category() const override { return ResourceCategory::Book; }
+        std::vector<std::string> authorNames() const override { return authors_; }
+        std::string standardNumber() const override { return isbn_; }
         Money costFor(int copies) const override;
 
     protected:

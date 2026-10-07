@@ -258,6 +258,21 @@ int main()
         {"VB1", 2}, // 2 x 420 = 840 from Campus Store, now the cheapest
     });
     vendorAcq.printReport(std::cout);
+    // Q13: searches by author, by ISBN/ISSN and by range of publication years.
+    std::cout << "\n=== Searches ===\n";
+    auto show = [](const std::string &label, const std::vector<const Resource *> &found)
+    {
+        std::cout << label << ":\n";
+        for (const Resource *r : found)
+            std::cout << "  " << r->summary() << "\n";
+        if (found.empty())
+            std::cout << "  (none)\n";
+    };
+    show("Author contains \"martin\"", catalog.searchAuthor("martin"));
+    show("ISBN 9780132350884", catalog.searchIsbnIssn("9780132350884"));
+    show("ISSN 0028-0836", catalog.searchIsbnIssn("0028-0836"));
+    show("Published 2008 to 2014", catalog.searchYears(2008, 2014));
+    show("Author contains \"nobody\"", catalog.searchAuthor("nobody"));
     // Direct purchase: errors are reported with exceptions
     std::cout << "\n=== Direct purchase that breaks a quota ===\n";
     try

@@ -147,3 +147,12 @@ Q1, Q2, Q3, Q4, Q5, Q6, Q7, Q8, Q9, Q10, Q11, Q12
 - Choosing by unit price is enough, because every pricing rule grows with the unit price, so the cheapest unit price is also the cheapest total.
 - `PurchaseRecord` has a `vendor` field. An approved order records the cheapest vendor at the time of purchase; rejected orders have no vendor; a cancellation record copies the vendor of the original order. The report shows `from <vendor>`. A vendor's price change later does not affect earlier orders, and a cancellation refunds the amount stored in the original order.
 - Limitation: a vendor only has a unit price. A vendor-specific platform fee for electronic resources is not modelled.
+
+## Q13 – Searches
+
+- I added two virtual functions in Resource: authorNames() and standardNumber(). By default, they return an empty list and an empty string. Book and EBook return their authors and ISBN, while Journal returns its ISSN. This keeps the search logic inside Catalog without needing to check the type of every resource.
+- searchAuthor(text) searches for resources where any author's name contains the given text, without considering uppercase or lowercase. Narrators and supervisors are not treated as authors.
+- searchIsbnIssn(number) searches for an exact ISBN or ISSN. While comparing, hyphens and spaces are ignored and the comparison is case-insensitive, so values like an ISSN ending with X are handled correctly.
+- searchYears(from, to) searches for resources published between the given years, including both from and to. If from is greater than to, it throws std::invalid_argument.
+- Empty author text or an empty ISBN/ISSN search throws std::invalid_argument.
+- The search results are returned in ID order, the same way as the existing searchTitle() function.

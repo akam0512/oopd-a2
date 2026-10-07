@@ -1237,6 +1237,68 @@ static void testVendors()
     CHECK(report.str().find("from V2") != std::string::npos);
     CHECK(report.str().find("from V3") != std::string::npos);
 }
+static void testSearches()
+{
+    Catalog c;
+    c.emplace<Book>("B1", "Clean Code", std::vector<std::string>{"Robert C. Martin"},
+                    "978-0132350884", "Prentice Hall", 2008, Money::of(450));
+    c.emplace<Book>("B2", "The C++ Programming Language", std::vector<std::string>{"Bjarne Stroustrup"},
+                    "978-0321563842", "Addison-Wesley", 2013, Money::of(1200));
+    c.emplace<Book>("B3", "Clean Architecture",
+                    std::vector<std::string>{"Robert C. Martin", "Another Author"},
+                    "978-0134494166", "Pearson", 2017, Money::of(500));
+    c.emplace<EBook>("E1", "Effective Modern C++", std::vector<std::string>{"Scott Meyers"},
+                     "978-1491903995", "O'Reilly", 2014, Money::of(200), "url", FileFormat::PDF,
+                     true);
+    c.emplace<Journal>("J1", "Nature", "0028-0836", "Springer", 2026, Money::of(300), 51);
+    c.emplace<Journal>("J2", "Science", "1234-567X", "AAAS", 2020, Money::of(300), 52);
+    c.emplace<AudioBook>("A1", "Project Hail Mary", "Ballantine", 2021, Money::of(100), "url",
+                         LicenseModel::AnnualSubscription, Money{}, "Ray Porter", 480);
+    c.emplace<Thesis>("T1", "Deep Learning", "IIT Delhi", DegreeLevel::PhD, "Dr. Rao", 2025);
+    c.emplace<ElectronicResource>("R1", "IEEE Xplore", "IEEE", 2026, Money::of(150), "url");
+
+    // By author: part of a name, any letter case, any of several authors
+    auto martin = c.searchAuthor("martin");
+    CHECK(martin.size() == 2 && martin[0]->id() == "B1" && martin[1]->id() == "B3"); // id order
+    CHECK(c.searchAuthor("MARTIN").size() == 2);
+    CHECK(c.searchAuthor("Robert C. Martin").size() == 2);
+    CHECK(c.searchAuthor("another").size() == 1); // the second author of B3
+    CHECK(c.searchAuthor("Stroustrup")[0]->id() == "B2");
+    CHECK(c.searchAuthor("Meyers")[0]->id() == "E1"); // e-books have authors too
+    CHECK(c.searchAuthor("Ray Porter").empty());      // a narrator is not an author
+    CHECK(c.searchAuthor("Dr. Rao").empty());         // nor is a supervisor
+    CHECK(c.searchAuthor("nobody").empty());
+    CHECK_THROWS(c.searchAuthor(""), std::invalid_argument);
+
+    // By ISBN or ISSN: hyphens, spaces and letter case are ignored
+    CHECK(c.searchIsbnIssn("978-0132350884").size() == 1);
+    CHECK(c.searchIsbnIssn("978-0132350884")[0]->id() == "B1");
+    CHECK(c.searchIsbnIssn("9780132350884")[0]->id() == "B1");
+    CHECK(c.searchIsbnIssn("978 0132 350884")[0]->id() == "B1");
+    CHECK(c.searchIsbnIssn("978-1491903995")[0]->id() == "E1"); // an e-book ISBN
+    CHECK(c.searchIsbnIssn("0028-0836")[0]->id() == "J1");      // an ISSN
+    CHECK(c.searchIsbnIssn("00280836")[0]->id() == "J1");
+    CHECK(c.searchIsbnIssn("1234-567x")[0]->id() == "J2"); // ISSN ending in X
+    CHECK(c.searchIsbnIssn("000-0000000").empty());
+    CHECK_THROWS(c.searchIsbnIssn(""), std::invalid_argument);
+    CHECK_THROWS(c.searchIsbnIssn("- -"), std::invalid_argument); // nothing left after cleaning
+
+    // By range of publication years: both ends included, any kind of resource
+    auto mid = c.searchYears(2010, 2017);
+    CHECK(mid.size() == 3 && mid[0]->id() == "B2" && mid[1]->id() == "B3" && mid[2]->id() == "E1");
+    CHECK(c.searchYears(2008, 2008).size() == 1); // a single year
+    CHECK(c.searchYears(2008, 2008)[0]->id() == "B1");
+    CHECK(c.searchYears(2013, 2014).size() == 2);        // both ends are included
+    CHECK(c.searchYears(2025, 2026).size() == 3);        // T1, J1, R1
+    CHECK(c.searchYears(1900, 2100).size() == c.size()); // everything
+    CHECK(c.searchYears(1990, 2000).empty());
+    CHECK_THROWS(c.searchYears(2020, 2010), std::invalid_argument);
+
+    // An empty catalog finds nothing
+    Catalog empty;
+    CHECK(empty.searchAuthor("x").empty() && empty.searchIsbnIssn("1").empty());
+    CHECK(empty.searchYears(2000, 2030).empty());
+}
 
 int main()
 {
@@ -1262,6 +1324,7 @@ int main()
     testRollover();
     testAllOrNothing();
     testVendors();
+    testSearches();
     std::cout
         << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;

@@ -54,6 +54,11 @@ namespace bookmgmt
         virtual ResourceCategory category() const = 0;
         virtual bool isDigital() const { return false; }
 
+        // Q13: used by the catalog searches. A resource without authors returns
+        // an empty list, and one without an ISBN/ISSN returns an empty string.
+        virtual std::vector<std::string> authorNames() const { return {}; }
+        virtual std::string standardNumber() const { return ""; } // ISBN or ISSN
+
         // Total cost of acquiring `quantity` units of this resource.
         // "Unit" means copies for print items and user seats for electronic
         // licences. Default: unitPrice * quantity. Throws if quantity <= 0.

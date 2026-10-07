@@ -17,6 +17,7 @@ namespace bookmgmt
         int subscriptionYears() const { return subscriptionYears_; }
 
         ResourceCategory category() const override { return ResourceCategory::Journal; }
+        std::string standardNumber() const override { return issn_; }
         Money costFor(int copies) const override;
 
     protected:
