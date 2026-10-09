@@ -76,50 +76,59 @@ namespace bookmgmt
     Budget::Failure Budget::evaluate(ResourceCategory c, int units, Money cost,
                                      const std::string &resourceId, std::string &why) const
     {
-        if (units <= 0)
+        try
         {
-            why = "quantity must be positive";
-            return Failure::BadInput;
-        }
-        if (cost.isNegative())
-        {
-            why = "cost must not be negative";
-            return Failure::BadInput;
-        }
-        if (auto left = unitsRemaining(c); left && units > *left)
-        {
-            why = std::string(categoryName(c)) + " unit quota exceeded: requested " +
-                  std::to_string(units) + ", " + std::to_string(*left) + " remaining";
-            return Failure::Quota;
-        }
-        // Q7: buying more of a title already bought is always fine; only a new
-        // title counts against the limit.
-        if (auto left = titlesRemaining(c); left && !resourceId.empty())
-        {
-            const Usage u = usageFor(c);
-            const bool isNewTitle = u.unitsByTitle.find(resourceId) == u.unitsByTitle.end();
-            if (isNewTitle && *left <= 0)
+            if (units <= 0)
             {
-                why = std::string(categoryName(c)) + " title quota exceeded: " + resourceId +
-                      " would be a new title, " + std::to_string(u.titles()) + " of " +
-                      std::to_string(quotaFor(c)->maxTitles) + " already bought";
+                why = "quantity must be positive";
+                return Failure::BadInput;
+            }
+            if (cost.isNegative())
+            {
+                why = "cost must not be negative";
+                return Failure::BadInput;
+            }
+            if (auto left = unitsRemaining(c); left && units > *left)
+            {
+                why = std::string(categoryName(c)) + " unit quota exceeded: requested " +
+                      std::to_string(units) + ", " + std::to_string(*left) + " remaining";
                 return Failure::Quota;
             }
+            // Q7: buying more of a title already bought is always fine; only a new
+            // title counts against the limit.
+            if (auto left = titlesRemaining(c); left && !resourceId.empty())
+            {
+                const Usage u = usageFor(c);
+                const bool isNewTitle = u.unitsByTitle.find(resourceId) == u.unitsByTitle.end();
+                if (isNewTitle && *left <= 0)
+                {
+                    why = std::string(categoryName(c)) + " title quota exceeded: " + resourceId +
+                          " would be a new title, " + std::to_string(u.titles()) + " of " +
+                          std::to_string(quotaFor(c)->maxTitles) + " already bought";
+                    return Failure::Quota;
+                }
+            }
+            if (auto left = spendRemaining(c); left && cost > *left)
+            {
+                why = std::string(categoryName(c)) + " spend quota exceeded: cost " +
+                      cost.toString() + ", " + left->toString() + " remaining";
+                return Failure::Quota;
+            }
+            if (cost > remaining())
+            {
+                why = "overall budget exceeded: cost " + cost.toString() + ", " +
+                      remaining().toString() + " remaining";
+                return Failure::Overall;
+            }
+            why.clear();
+            return Failure::None;
         }
-        if (auto left = spendRemaining(c); left && cost > *left)
+        catch (const CurrencyMismatchError &e)
         {
-            why = std::string(categoryName(c)) + " spend quota exceeded: cost " +
-                  cost.toString() + ", " + left->toString() + " remaining";
-            return Failure::Quota;
+            // Q15: a price, quota or budget in another currency cannot be compared.
+            why = e.what();
+            return Failure::BadInput;
         }
-        if (cost > remaining())
-        {
-            why = "overall budget exceeded: cost " + cost.toString() + ", " +
-                  remaining().toString() + " remaining";
-            return Failure::Overall;
-        }
-        why.clear();
-        return Failure::None;
     }
 
     std::string Budget::check(ResourceCategory c, int units, Money cost,

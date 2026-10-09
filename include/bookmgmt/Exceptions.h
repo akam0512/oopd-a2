@@ -55,4 +55,12 @@ namespace bookmgmt
         using LibraryError::LibraryError;
     };
 
+    // Q15: thrown when amounts in different currencies are added, subtracted or compared.
+    class CurrencyMismatchError : public LibraryError
+    {
+    public:
+        CurrencyMismatchError(const std::string &a, const std::string &b)
+            : LibraryError("cannot mix currencies: " + a + " and " + b) {}
+    };
+
 } // namespace bookmgmt

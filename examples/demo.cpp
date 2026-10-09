@@ -322,6 +322,51 @@ int main()
               << " available\n";
     std::cout << "AB01: " << desk.inUse("AB01") << " sessions, " << desk.available("AB01")
               << " seats free\n";
+    // Q15: currencies. Amounts have a currency code (INR unless given); adding,
+    // subtracting or comparing different currencies throws.
+    std::cout << "\n=== Currencies ===\n";
+    const Money rupees = Money::of(450);
+    const Money dollars = Money::of(12, 50, "USD");
+    std::cout << "rupees:  " << rupees.toStringWithCurrency() << "\n";
+    std::cout << "dollars: " << dollars.toStringWithCurrency() << "\n";
+    std::cout << "2 x dollars: " << (dollars * 2).toStringWithCurrency() << "\n";
+    std::cout << "dollars + dollars: " << (dollars + dollars).toStringWithCurrency() << "\n";
+    try
+    {
+        std::cout << (rupees + dollars).toStringWithCurrency() << "\n";
+    }
+    catch (const CurrencyMismatchError &e)
+    {
+        std::cout << "rupees + dollars: " << e.what() << "\n";
+    }
+    try
+    {
+        std::cout << (rupees < dollars) << "\n";
+    }
+    catch (const CurrencyMismatchError &e)
+    {
+        std::cout << "rupees < dollars: " << e.what() << "\n";
+    }
+    Money runningTotal; // zero fits any currency
+    runningTotal += dollars;
+    runningTotal += dollars;
+    std::cout << "a total that starts as zero: " << runningTotal.toStringWithCurrency() << "\n";
+
+    // A whole budget in dollars works the same way.
+    Catalog dollarCatalog;
+    dollarCatalog.emplace<Book>("UB1", "Clean Code", std::vector<std::string>{"Robert C. Martin"},
+                                "978-0132350884", "Prentice Hall", 2008, Money::of(45, 0, "USD"));
+    Budget dollarBudget(Money::of(500, 0, "USD"));
+    AcquisitionManager dollarAcq(dollarCatalog, dollarBudget);
+    dollarAcq.purchase("UB1", 3);
+    std::cout << "spent " << dollarBudget.spent().toStringWithCurrency() << ", remaining "
+              << dollarBudget.remaining().toStringWithCurrency() << "\n";
+
+    // A rupee budget cannot pay a dollar price.
+    Budget rupeeBudget(Money::of(10000));
+    AcquisitionManager mixedAcq(dollarCatalog, rupeeBudget);
+    mixedAcq.processBatch({{"UB1", 1}});
+    mixedAcq.printReport(std::cout);
     // Direct purchase: errors are reported with exceptions
     std::cout << "\n=== Direct purchase that breaks a quota ===\n";
     try

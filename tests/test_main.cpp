@@ -1411,6 +1411,115 @@ static void testLending()
     desk2.giveBack("bob", "B1");
     CHECK(desk2.inUse("B1") == 0);
 }
+static void testCurrency()
+{
+    // The default currency is INR, so all earlier code is unchanged
+    CHECK(Money{}.currency() == "INR");
+    CHECK(Money::of(5).currency() == "INR");
+    CHECK(Money::fromMinor(5).currency() == "INR");
+
+    // An explicit currency: three letters, kept in upper case
+    const Money usd = Money::of(12, 5, "USD");
+    CHECK(usd.currency() == "USD" && usd.minorUnits() == 1205);
+    CHECK(Money::of(1, 0, "eur").currency() == "EUR");
+    CHECK(Money::fromMinor(250, "gbp").currency() == "GBP");
+    CHECK(usd.toString() == "12.05"); // the amount alone, as before
+    CHECK(usd.toStringWithCurrency() == "12.05 USD");
+    std::ostringstream os;
+    os << usd;
+    CHECK(os.str() == "12.05");
+    CHECK_THROWS(Money::of(1, 0, ""), std::invalid_argument);
+    CHECK_THROWS(Money::of(1, 0, "US"), std::invalid_argument);
+    CHECK_THROWS(Money::of(1, 0, "USDX"), std::invalid_argument);
+    CHECK_THROWS(Money::of(1, 0, "U5D"), std::invalid_argument);
+    CHECK_THROWS(Money::fromMinor(1, "12 "), std::invalid_argument);
+
+    // Same currency: everything works and the currency is kept
+    const Money sum = Money::of(10, 0, "USD") + Money::of(5, 0, "USD");
+    CHECK(sum == Money::of(15, 0, "USD") && sum.currency() == "USD");
+    CHECK((Money::of(10, 0, "USD") - Money::of(4, 0, "USD")).currency() == "USD");
+    CHECK((Money::of(10, 0, "USD") * 3) == Money::of(30, 0, "USD"));
+    CHECK((3 * Money::of(10, 0, "USD")).currency() == "USD");
+    CHECK(Money::of(100, 0, "USD").scaledByPercent(120) == Money::of(120, 0, "USD"));
+    CHECK(Money::of(100, 0, "USD").scaledByPercent(120).currency() == "USD");
+    CHECK(Money::of(1, 0, "USD") < Money::of(2, 0, "USD"));
+    CHECK(Money::of(2, 0, "USD") >= Money::of(2, 0, "USD"));
+    CHECK(Money::of(2, 0, "USD") != Money::of(3, 0, "USD"));
+
+    // Different currencies: adding, subtracting and comparing all throw
+    const Money inr = Money::of(10);
+    const Money dollars = Money::of(10, 0, "USD");
+    CHECK_THROWS(dollars + inr, CurrencyMismatchError);
+    CHECK_THROWS(dollars - inr, CurrencyMismatchError);
+    CHECK_THROWS(inr + dollars, CurrencyMismatchError);
+    CHECK_THROWS(dollars == inr, CurrencyMismatchError); // not "false": it throws
+    CHECK_THROWS(dollars != inr, CurrencyMismatchError);
+    CHECK_THROWS(dollars < inr, CurrencyMismatchError);
+    CHECK_THROWS(dollars <= inr, CurrencyMismatchError);
+    CHECK_THROWS(dollars > inr, CurrencyMismatchError);
+    CHECK_THROWS(dollars >= inr, CurrencyMismatchError);
+    CHECK_THROWS(Money::of(1, 0, "EUR") < Money::of(2, 0, "USD"), CurrencyMismatchError);
+
+    // The error is a library error with a clear message, and a failed += changes nothing
+    try
+    {
+        dollars + inr;
+        CHECK(false);
+    }
+    catch (const LibraryError &e)
+    {
+        const std::string message = e.what();
+        CHECK(message.find("USD") != std::string::npos && message.find("INR") != std::string::npos);
+    }
+    Money total = Money::of(10, 0, "USD");
+    CHECK_THROWS(total += inr, CurrencyMismatchError);
+    CHECK_THROWS(total -= inr, CurrencyMismatchError);
+    CHECK(total == Money::of(10, 0, "USD") && total.currency() == "USD");
+
+    // Zero fits any currency, so a running total can start as Money{}
+    Money running; // zero
+    running += Money::of(5, 0, "USD");
+    running += Money::of(7, 0, "USD");
+    CHECK(running == Money::of(12, 0, "USD") && running.currency() == "USD");
+    CHECK_THROWS(running += inr, CurrencyMismatchError); // now it is a USD total
+    CHECK((Money{} + dollars).currency() == "USD");
+    CHECK((dollars + Money{}).currency() == "USD");
+    CHECK((Money{} - dollars) == Money::of(-10, 0, "USD"));
+    CHECK(Money{} == Money::of(0, 0, "USD"));
+    CHECK(Money{} < dollars);
+    CHECK(Money::of(0, 0, "USD") < inr);
+    CHECK(Money::of(0, 0, "EUR") == Money::of(0, 0, "USD")); // zero is zero in any currency
+    CHECK(dollars + Money::of(0, 0, "EUR") == dollars);      // adding zero changes nothing
+
+    // A whole purchase flow works in another currency
+    Catalog c;
+    c.emplace<Book>("B1", "T", std::vector<std::string>{"A"}, "i", "P", 2020,
+                    Money::of(100, 0, "USD"));
+    Budget budget(Money::of(1000, 0, "USD"));
+    budget.setQuota(ResourceCategory::Book, {10, Money::of(500, 0, "USD")});
+    AcquisitionManager acq(c, budget, TaxPolicy(10, 0));
+    const PurchaseRecord rec = acq.purchase("B1", 2);
+    CHECK(rec.cost == Money::of(220, 0, "USD") && rec.cost.currency() == "USD");
+    CHECK(budget.spent() == Money::of(220, 0, "USD") && budget.spent().currency() == "USD");
+    CHECK(budget.remaining() == Money::of(780, 0, "USD"));
+    CHECK(acq.totalSpent() == Money::of(220, 0, "USD") && acq.totalSpent().currency() == "USD");
+    CHECK(acq.cancel(1).cost == Money::of(-220, 0, "USD"));
+    CHECK(budget.spent() == Money{});
+
+    // Prices in one currency and a budget in another: rejected, nothing is bought
+    Catalog c2;
+    c2.emplace<Book>("B1", "T", std::vector<std::string>{"A"}, "i", "P", 2020,
+                     Money::of(100, 0, "USD"));
+    Budget rupees(Money::of(1000)); // INR
+    AcquisitionManager acq2(c2, rupees);
+    std::string why;
+    CHECK(!acq2.canPurchase("B1", 1, &why));
+    CHECK(why.find("cannot mix currencies") != std::string::npos);
+    CHECK_THROWS(acq2.purchase("B1", 1), std::invalid_argument);
+    CHECK(c2.holdings("B1") == 0 && rupees.spent() == Money{});
+    const auto res = acq2.processBatch({{"B1", 1}}); // a batch rejects instead of throwing
+    CHECK(!res[0].approved && res[0].reason.find("cannot mix currencies") != std::string::npos);
+}
 
 int main()
 {
@@ -1438,6 +1547,7 @@ int main()
     testVendors();
     testSearches();
     testLending();
+    testCurrency();
     std::cout
         << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;

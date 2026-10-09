@@ -168,3 +168,17 @@ Q1, Q2, Q3, Q4, Q5, Q6, Q7, Q8, Q9, Q10, Q11, Q12
 - A patron is just stored as a string. There is no per-patron limit given in the assignment, so the same patron can have multiple copies of the same item. Each giveBack returns one copy.
 
 - One limitation is that cancelling an order from Q8 does not check whether the copies or seats are currently being used. If something is cancelled while in use, available() does not go below 0, and the existing loan/session can still be returned or closed.
+
+## Q15 – Currency code in Money
+
+- I added a three-letter currency code to `Money`. The code is stored in upper case. The currency can be given as the last argument in `Money::of(...)` and `Money::fromMinor(...)`. If the code is not exactly three letters, it throws `std::invalid_argument`. The default currency is INR, so the old code and output still work as before. `toString()` and `<<` still show only the amount, while `toStringWithCurrency()` also shows the currency code.
+
+- If I try to add, subtract, or compare two amounts with different currencies, it throws `CurrencyMismatchError`, which is a `LibraryError`. The error message shows both currencies. This also applies to `==` instead of returning false. If `+=` or `-=` fails, the original value is not changed. Multiplication and `scaledByPercent()` keep the same currency.
+
+- I allowed a zero `Money` value to work with any currency. This is needed because the library starts many totals with `Money{}`. Without this, adding the first USD amount to a zero total would fail. For example, `Money{} + USD 5` gives `USD 5`. But once a total already has a currency, it cannot be mixed with a different currency.
+
+- The budget, quotas and resource prices must all use the same currency. If there is a currency mismatch, `Budget::evaluate` converts it into a rejection reason. Because of this, `canPurchase` returns false and `processBatch` rejects the request with the currency mismatch message. A direct `purchase` throws `std::invalid_argument`. No budget or purchase state is changed when this happens.
+
+- I removed `constexpr` from the `Money` functions because the currency is stored using `std::string`, which cannot be used in constant expressions in C++17. Nothing in the project was using these functions as constant expressions.
+
+- There is no currency conversion or exchange-rate support. Also, reports still show only the amount without the currency code, so the existing report format stays unchanged.
