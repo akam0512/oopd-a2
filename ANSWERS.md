@@ -182,3 +182,10 @@ Q1, Q2, Q3, Q4, Q5, Q6, Q7, Q8, Q9, Q10, Q11, Q12
 - I removed `constexpr` from the `Money` functions because the currency is stored using `std::string`, which cannot be used in constant expressions in C++17. Nothing in the project was using these functions as constant expressions.
 
 - There is no currency conversion or exchange-rate support. Also, reports still show only the amount without the currency code, so the existing report format stays unchanged.
+
+## Q16 – Test macros replaced by assert
+
+- The tests used two macros with global counters: `CHECK(cond)` and `CHECK_THROWS(expr, ExType)`. Every `CHECK(cond)` is now `assert(cond)`, with the same condition.
+- `assert` cannot say "this expression must throw this type", so `CHECK_THROWS` became a call to one small function template, `throws<ExType>(fn)`, which returns true only if `fn` throws `ExType` (or a type derived from it); no exception or a different one gives false. The test line is `assert(throws<ExType>([&] { (void)(expr); }))`. It is an ordinary function, not a macro, so it is type-checked.
+- What does not change: every check still tests exactly the same condition. What has to change: `assert` aborts at the first failure (printing the file, line and expression) instead of counting failures and carrying on, so `main` prints "All tests passed" instead of a count.
+- `assert` does nothing when `NDEBUG` is defined (for example in a Release build), and many checks have side effects (such as `assert(acq.purchase(...).approved)`), so the test file does `#undef NDEBUG` before `#include <cassert>`. I checked that a build with `-DNDEBUG` still runs every check.
