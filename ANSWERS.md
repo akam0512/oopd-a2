@@ -74,7 +74,7 @@ Q1, Q2, Q3, Q4, Q5, Q6, Q7, Q8, Q9, Q10, Q11, Q12, Q13, Q14, Q15, Q16
 - I added `Budget::titlesRemaining()` and `Usage::titles()`, and the budget report has a new "Titles used/max" column.
 - I stored units per title (a map) instead of a plain set so that Q8 (cancellation) can reduce a title's units and remove the title when it reaches zero.
 
-### Q8 – Cancellation
+## Q8 – Cancellation
 
 - I use the order number to identify an order for cancellation. `cancel(orderNo)` only works for an approved order. If the order number is invalid, the order was rejected, it is already a cancellation record, or it was already cancelled, the function throws `std::invalid_argument` and does not change anything.
 
@@ -92,7 +92,7 @@ Q1, Q2, Q3, Q4, Q5, Q6, Q7, Q8, Q9, Q10, Q11, Q12, Q13, Q14, Q15, Q16
 
 - A cancellation always cancels the complete order. It is not possible to cancel only part of an order.
 
-### Q9 – Department budgets
+## Q9 – Department budgets
 
 - I created a separate `Department` type instead of using a normal string. This makes department names safer to use and avoids accidentally mixing them with other strings.
 
