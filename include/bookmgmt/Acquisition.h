@@ -1,4 +1,5 @@
 #pragma once
+// MT26014-Akanksha Mishra
 // AcquisitionManager: turns purchase requests into orders, enforcing the
 // Budget's quotas, updating Catalog holdings and keeping an order history.
 //

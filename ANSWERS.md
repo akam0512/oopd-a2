@@ -1,5 +1,7 @@
 # Assignment 2 – Answers
 
+<----MT26014-Akanksha Mishra--->
+
 ## Attempted questions
 
 Q1, Q2, Q3, Q4, Q5, Q6, Q7, Q8, Q9, Q10, Q11, Q12, Q13, Q14, Q15, Q16
@@ -189,3 +191,33 @@ Q1, Q2, Q3, Q4, Q5, Q6, Q7, Q8, Q9, Q10, Q11, Q12, Q13, Q14, Q15, Q16
 - `assert` cannot say "this expression must throw this type", so `CHECK_THROWS` became a call to one small function template, `throws<ExType>(fn)`, which returns true only if `fn` throws `ExType` (or a type derived from it); no exception or a different one gives false. The test line is `assert(throws<ExType>([&] { (void)(expr); }))`. It is an ordinary function, not a macro, so it is type-checked.
 - What does not change: every check still tests exactly the same condition. What has to change: `assert` aborts at the first failure (printing the file, line and expression) instead of counting failures and carrying on, so `main` prints "All tests passed" instead of a count.
 - `assert` does nothing when `NDEBUG` is defined (for example in a Release build), and many checks have side effects (such as `assert(acq.purchase(...).approved)`), so the test file does `#undef NDEBUG` before `#include <cassert>`. I checked that a build with `-DNDEBUG` still runs every check.
+
+---
+
+## AI Disclosure
+
+1. AI Tool Used
+
+I used ChatGPT as an AI-assisted learning and development tool while working on this Object-Oriented Programming and Design (OOPD) Assignment 2.
+
+2. Purpose of Using AI
+
+The primary purpose of using AI was to improve my understanding of the assignment requirements, clarify object-oriented programming concepts, identify errors, and obtain guidance during implementation. I used it as a supporting tool throughout the development process rather than relying on it solely to produce a final submission.
+
+3. Areas Where AI Assistance Was Used
+
+Understanding requirements and design: I used ChatGPT to clarify the requirements of individual questions and understand how different classes, inheritance relationships, composition, and responsibilities should fit into the existing project structure.
+
+Implementation guidance: I sought explanations and coding guidance while working on features involving different resource types, including journals, e-books, audiobooks, and theses. I also used AI assistance to understand the implementation requirements for pricing rules, discounts, taxation, budget management, vendor offers, purchase cancellation, lending, currency-aware monetary values, and related functionality.
+
+Debugging and error resolution: I used ChatGPT to help understand compiler errors, unexpected behaviour, and potential implementation issues. I reviewed the suggested fixes in the context of my existing code and used compilation and test execution to check whether the changes worked as expected.
+
+Testing and verification: I used AI assistance to understand how to test different features and identify cases that should be checked. I ran the project's test suite and demo program to verify the behaviour of the implementation. I also checked the build process and warning output during verification.
+
+Documentation and submission preparation: I used ChatGPT for guidance on preparing and reviewing README.md and ANSWERS.md, explaining design decisions, improving the clarity of written explanations, and preparing the AI disclosure. I also used guidance for Git version control, file naming, and packaging the project for submission.
+
+4. Review and Verification
+
+I reviewed the suggestions provided by ChatGPT and made changes to the project as part of my development process. I used the available compiler, test suite, and demo program to verify the project after making changes. The final project was checked for successful compilation and test execution. Passing these checks provides evidence of functional correctness for the tested cases, although it does not independently guarantee that every possible case or assignment requirement is satisfied.
+
+**Prompts and supporting materials:** I uploaded a few assignment-related prompts and materials to ChatGPT to obtain help with understanding the requirements, clarifying implementation details, and resolving specific doubts during development. The responses were used as guidance while working on the project. I reviewed the relevant suggestions and verified the implementation through compilation, testing, and demo execution.
