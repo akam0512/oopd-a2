@@ -1,4 +1,4 @@
-#include "bookmgmt/Thesis.h"
+#include "bookmgmt/MT26014_Thesis.h"
 
 #include <ostream>
 #include <stdexcept>

@@ -14,8 +14,8 @@
 
 #include "bookmgmt/Budget.h"
 #include "bookmgmt/Catalog.h"
-#include "bookmgmt/Department.h"
-#include "bookmgmt/Tax.h"
+#include "bookmgmt/MT26014_Department.h"
+#include "bookmgmt/MT26014_Tax.h"
 
 namespace bookmgmt
 {

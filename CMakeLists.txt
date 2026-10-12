@@ -10,16 +10,16 @@ add_library(bookmgmt
     src/Resource.cpp
     src/Book.cpp
     src/ElectronicResource.cpp
-    src/Journal.cpp
-    src/EBook.cpp
-    src/AudioBook.cpp
-    src/Thesis.cpp
-    src/Tax.cpp
+    src/MT26014_Journal.cpp
+    src/MT26014_EBook.cpp
+    src/MT26014_AudioBook.cpp
+    src/MT26014_Thesis.cpp
+    src/MT26014_Tax.cpp
     src/Budget.cpp
     src/Catalog.cpp
     src/Acquisition.cpp
-    src/Department.cpp
-    src/Lending.cpp
+    src/MT26014_Department.cpp
+    src/MT26014_Lending.cpp
 )
 target_include_directories(bookmgmt PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 

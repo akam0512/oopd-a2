@@ -1,4 +1,4 @@
-#include "bookmgmt/Journal.h"
+#include "bookmgmt/MT26014_Journal.h"
 
 #include <ostream>
 #include <stdexcept>
